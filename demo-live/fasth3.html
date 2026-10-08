@@ -1,0 +1,328 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>FastH3 single-view room</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: #0b0d10; color: #e7ecef;
+    font: 14px/1.4 ui-sans-serif, system-ui, -apple-system, sans-serif;
+    display: flex; flex-direction: column; min-height: 100vh;
+  }
+  header { padding: 10px 16px; border-bottom: 1px solid #1d2329; display: flex; gap: 16px; align-items: center; flex-wrap: wrap; }
+  header h1 { font-size: 14px; font-weight: 600; margin: 0; }
+  #status { color: #8aa0ad; }
+  #status.err { color: #ff6b6b; }
+  #status.ok { color: #3ddc84; }
+  #status.busy { color: #f0c05a; }
+  main { display: grid; place-items: center; padding: 16px 16px 8px; }
+  .stage { position: relative; width: min(100%, 1040px); aspect-ratio: 16 / 9; background: #000; border: 1px solid #1d2329; border-radius: 10px; overflow: hidden; }
+  .stage > * { position: absolute; inset: 0; width: 100%; height: 100%; }
+  video, #freeze, #still { object-fit: cover; display: block; }
+  .hidden { display: none !important; }
+  .overlay { display: grid; place-items: center; text-align: center; padding: 24px; color: #8aa0ad; background: rgba(0,0,0,.35); }
+  .controls { width: min(100%, 1040px); margin: 0 auto; display: flex; flex-direction: column; gap: 10px; padding: 0 16px 12px; }
+  .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  label.small { color: #6b7d88; font-size: 12px; min-width: 110px; }
+  label.chk { color: #8aa0ad; font-size: 13px; display: inline-flex; gap: 6px; align-items: center; }
+  input[type=text], textarea { flex: 1; min-width: 220px; background: #11151a; border: 1px solid #263038; color: #e7ecef; padding: 9px 11px; border-radius: 7px; font: inherit; }
+  textarea { resize: vertical; }
+  input:disabled, textarea:disabled { opacity: .5; }
+  select, input[type=file] { background: #11151a; border: 1px solid #263038; color: #e7ecef; padding: 8px 10px; border-radius: 7px; }
+  button { background: #1b2026; border: 1px solid #2b353d; color: #e7ecef; padding: 9px 14px; border-radius: 7px; cursor: pointer; }
+  button:hover:not(:disabled) { background: #222a31; }
+  button:disabled { opacity: .5; cursor: default; }
+  button.primary { background: #1f6f43; border-color: #2a7d4f; }
+  .beat { font-size: 13px; padding: 6px 11px; }
+  /* angle picker */
+  #angles { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; width: 100%; }
+  #angles canvas { width: 100%; height: auto; border: 2px solid #263038; border-radius: 6px; cursor: pointer; display: block; }
+  #angles canvas.sel { border-color: #3ddc84; }
+  #angles .cell { position: relative; }
+  #angles .cell span { position: absolute; left: 6px; top: 4px; font-size: 11px; color: #cfd8de; text-shadow: 0 1px 2px #000; }
+  footer { padding: 10px 16px; border-top: 1px solid #1d2329; color: #6b7d88; font-size: 12px; }
+  .log { font: 12px/1.5 ui-monospace, monospace; color: #7f93a0; max-height: 110px; overflow: auto; background: #0e1216; border: 1px solid #1d2329; border-radius: 8px; padding: 8px 10px; white-space: pre-wrap; }
+  .hint { color: #6b7d88; }
+  a { color: #5fa8e0; }
+</style>
+</head>
+<body>
+  <header>
+    <h1>FastH3 · single-view room</h1>
+    <span id="status">idle</span>
+    <span class="hint" style="margin-left:auto"><a href="/">→ LingBot navigate demo</a></span>
+  </header>
+
+  <main>
+    <div class="stage">
+      <video id="out" autoplay playsinline></video>
+      <canvas id="freeze" class="hidden"></canvas>
+      <img id="still" class="hidden" alt="" />
+      <div class="overlay" id="overlay">
+        <div>
+          <div style="font-size:18px;margin-bottom:8px">no scene yet</div>
+          <div class="hint">choose the one view of the room, then <b>Start scene</b></div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <div class="controls">
+    <!-- 1. The single view -->
+    <div class="row">
+      <label class="small">the view</label>
+      <select id="viewSrc">
+        <option value="grid" selected>pick one angle from test-1.jpeg sheet (closed room, 5 angles)</option>
+        <option value="upload">upload an image</option>
+      </select>
+      <input type="file" id="file" accept="image/*" class="hidden" />
+      <label class="small">clip length</label>
+      <select id="secs" title="FastH3 minimum is ~5.2 s"><option value="6" selected>6 s</option><option value="8">8 s</option><option value="10">10 s</option></select>
+      <label class="small">fixed seed</label>
+      <input id="seed" type="number" min="0" step="1" value="42" style="width:90px;background:#11151a;border:1px solid #263038;color:#e7ecef;padding:8px 10px;border-radius:7px" />
+    </div>
+    <div class="row" id="anglesRow">
+      <div id="angles"></div>
+    </div>
+
+    <!-- 2. What the room is (no people) -->
+    <div class="row">
+      <label class="small">room</label>
+      <input id="scene" type="text" value="a closed, windowless, doorless room at night with bare dark grey walls, a dark wooden floor, a single plain wooden table in the center with one small ceramic vase on it, lit only by a soft cool light from the ceiling" />
+    </div>
+
+    <!-- 3. Consistency controls -->
+    <div class="row">
+      <label class="small">consistency</label>
+      <label class="chk"><input type="checkbox" id="pinEnd" checked /> pin end frame to the view (start = end = same image)</label>
+      <select id="anchor" title="what each new clip starts from">
+        <option value="seed" selected>every clip starts from the view</option>
+        <option value="prev">continue from previous clip</option>
+      </select>
+      <button id="start" class="primary">Start scene</button>
+    </div>
+
+    <!-- 4. Ambient instruction = one clip -->
+    <div class="row">
+      <label class="small">ambient event</label>
+      <input id="direct" type="text" placeholder="e.g. 'the light from the window slowly brightens' — leave empty for a still hold" disabled />
+      <button id="send" disabled>Generate →</button>
+    </div>
+    <div class="row" id="beats">
+      <span class="hint">quick:</span>
+      <button class="beat" data-p="" disabled>Still hold</button>
+      <button class="beat" data-p="the ceiling light flickers very slightly" disabled>Light flickers</button>
+      <button class="beat" data-p="fine dust drifts slowly in the light" disabled>Dust</button>
+      <button class="beat" data-p="shadows shift slowly across the wall" disabled>Shadows</button>
+      <button class="beat" data-p="the room slowly grows darker" disabled>Dims</button>
+    </div>
+
+    <div class="row" style="align-items:flex-start">
+      <label class="small" style="padding-top:9px">scene sequence</label>
+      <textarea id="seq" rows="4" disabled placeholder="one instruction per line (empty line = still hold)">still hold
+the ceiling light flickers very slightly
+still hold
+fine dust drifts slowly in the light</textarea>
+      <button id="runSeq" disabled>Generate sequence</button>
+    </div>
+
+    <div class="log" id="log"></div>
+  </div>
+
+  <footer>
+    One closed room, one view, no people, no window. Each clip starts (and, when pinned, ends) on the exact
+    reference image, so the view cannot drift to another angle. Sessions bill per second — close the tab when done.
+  </footer>
+
+<script type="module">
+  import { Reactor } from 'https://esm.sh/@reactor-team/js-sdk';
+
+  const $ = (id) => document.getElementById(id);
+  const video = $('out'), freeze = $('freeze'), still = $('still'), overlay = $('overlay');
+  const statusEl = $('status'), logEl = $('log');
+  const viewSrcEl = $('viewSrc'), fileEl = $('file'), anglesRow = $('anglesRow'), anglesEl = $('angles');
+  const secsEl = $('secs'), seedEl = $('seed'), sceneEl = $('scene'), pinEndEl = $('pinEnd'), anchorEl = $('anchor'), startBtn = $('start');
+  const fixedSeed = () => Math.max(0, Math.floor(Number(seedEl.value) || 0));
+  const directEl = $('direct'), sendBtn = $('send'), seqEl = $('seq'), runSeqBtn = $('runSeq');
+  const beatBtns = [...document.querySelectorAll('.beat')];
+
+  let reactor = null;
+  let seedRef = null;        // FileRef of the chosen view
+  let lastClipId = null;
+  let playing = false;
+  let built = [];
+  let selectedAngle = 3; // ANGLE 4
+
+  const setStatus = (m, c = '') => { statusEl.textContent = m; statusEl.className = c; };
+  const log = (m) => { logEl.textContent += m + '\n'; logEl.scrollTop = logEl.scrollHeight; };
+  const enableDirecting = (on) => {
+    directEl.disabled = sendBtn.disabled = seqEl.disabled = runSeqBtn.disabled = !on;
+    beatBtns.forEach((b) => (b.disabled = !on));
+  };
+  const clipId = (d) => d?.clip?.clip_id ?? d?.clip_id ?? d?.data?.clip?.clip_id ?? null;
+
+  // ---- the angle sheet (test-1.jpeg, 1280x714, closed room): 5 tiles, rects auto-detected ----
+  const GRID = { src: '/test-1.jpeg', firstAngle: 1 };
+  const TILES = [
+    { x: 23,  y: 48,  w: 399, h: 267 },   // ANGLE 1
+    { x: 435, y: 49,  w: 409, h: 266 },   // ANGLE 2
+    { x: 858, y: 49,  w: 399, h: 266 },   // ANGLE 3
+    { x: 23,  y: 359, w: 609, h: 318 },   // ANGLE 4 (largest, head-on) — default
+    { x: 648, y: 359, w: 609, h: 318 },   // ANGLE 5
+  ];
+  let gridImg = null;
+
+  async function loadGrid() {
+    if (gridImg) return gridImg;
+    gridImg = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = GRID.src; });
+    anglesEl.innerHTML = '';
+    TILES.forEach((t, idx) => {
+      const cell = document.createElement('div'); cell.className = 'cell';
+      const c = document.createElement('canvas'); c.width = t.w; c.height = t.h;
+      c.getContext('2d').drawImage(gridImg, t.x, t.y, t.w, t.h, 0, 0, t.w, t.h);
+      if (idx === selectedAngle) c.classList.add('sel');
+      c.addEventListener('click', () => {
+        selectedAngle = idx;
+        anglesEl.querySelectorAll('canvas').forEach((k, i) => k.classList.toggle('sel', i === idx));
+      });
+      const lab = document.createElement('span'); lab.textContent = 'ANGLE ' + (GRID.firstAngle + idx);
+      cell.append(c, lab); anglesEl.appendChild(cell);
+    });
+    return gridImg;
+  }
+
+  // Crop the selected tile out of the sheet and upscale to the model canvas size.
+  async function cropAngle() {
+    await loadGrid();
+    const t = TILES[selectedAngle];
+    const c = document.createElement('canvas'); c.width = 1344; c.height = 756;
+    const g = c.getContext('2d'); g.imageSmoothingQuality = 'high';
+    g.drawImage(gridImg, t.x, t.y, t.w, t.h, 0, 0, c.width, c.height);
+    const blob = await new Promise((r) => c.toBlob(r, 'image/jpeg', 0.95));
+    return new File([blob], `angle-${GRID.firstAngle + selectedAngle}.jpg`, { type: 'image/jpeg' });
+  }
+
+  viewSrcEl.addEventListener('change', async () => {
+    fileEl.classList.toggle('hidden', viewSrcEl.value !== 'upload');
+    anglesRow.classList.toggle('hidden', viewSrcEl.value !== 'grid');
+    if (viewSrcEl.value === 'grid') await loadGrid();
+  });
+  // Sheet is the default: show it right away with ANGLE 4 (largest, head-on) selected.
+  loadGrid().catch((e) => log('✗ could not load test-1.jpeg sheet: ' + e));
+
+  async function pickSeed() {
+    if (viewSrcEl.value === 'upload' && fileEl.files[0]) return fileEl.files[0];
+    return cropAngle();
+  }
+
+  // Hard constraints: no people, locked camera, one view, nothing changes.
+  const CONSTRAINTS =
+    'No people, no animals, no characters appear at any point. ' +
+    'The room is completely closed: there are no windows, no doors and no openings, and nothing enters or leaves. ' +
+    'The camera is completely locked: it does not move, pan, tilt, zoom or cut, and shows this same single view of the room for the entire clip. ' +
+    'The walls, floor, table and vase stay exactly as in the reference image; no new objects appear. ' +
+    'The image is slightly soft and low-detail, matching the reference exactly; do not add new details, objects or textures and do not sharpen. ' +
+    'Only very subtle ambient motion. Steady, consistent, identical framing throughout.';
+  const buildPrompt = (instruction) =>
+    `${sceneEl.value}. ${instruction ? instruction + '.' : 'Nothing happens; the room is perfectly still.'} ${CONSTRAINTS}`;
+
+  const media = new MediaStream();
+
+  function captureFrame() {
+    if (!video.videoWidth) return;
+    freeze.width = video.videoWidth; freeze.height = video.videoHeight;
+    freeze.getContext('2d').drawImage(video, 0, 0);
+    freeze.classList.remove('hidden');
+  }
+
+  async function playNextIfIdle() {
+    if (playing || built.length === 0) return;
+    const id = built.shift();
+    try { await reactor.sendCommand('play', id ? { clip_id: id } : {}); }
+    catch (e) { log('✗ play failed: ' + (e?.message || e)); }
+  }
+
+  async function startScene() {
+    startBtn.disabled = true; viewSrcEl.disabled = true; fileEl.disabled = true;
+    setStatus('preparing the view…');
+    const seed = await pickSeed();
+    still.src = URL.createObjectURL(seed);
+    still.classList.remove('hidden');
+    overlay.classList.add('hidden');
+
+    reactor = new Reactor({ modelName: 'reactor/fast-h3' });
+
+    reactor.on('trackReceived', (name, track) => {
+      media.addTrack(track);
+      if (name === 'main_video') { video.srcObject = media; video.muted = false; video.play().catch(() => {}); }
+    });
+    reactor.on('clip_generated', (d) => { built.push(clipId(d)); log('· clip built'); playNextIfIdle(); });
+    reactor.on('clip_started', () => { playing = true; still.classList.add('hidden'); freeze.classList.add('hidden'); setStatus('▶ playing', 'ok'); });
+    reactor.on('clip_finished', () => { playing = false; captureFrame(); setStatus('holding — send the next instruction', 'ok'); playNextIfIdle(); });
+    reactor.on('clip_stopped', () => { playing = false; captureFrame(); });
+    reactor.on('clip_failed', (d) => { playing = false; log('✗ clip failed: ' + JSON.stringify(d)); setStatus('clip failed', 'err'); });
+    reactor.on('command_error', (d) => { setStatus('command error: ' + (d?.reason || JSON.stringify(d)), 'err'); log('✗ ' + JSON.stringify(d)); });
+
+    reactor.on('statusChanged', async (status) => {
+      if (status !== 'ready') { setStatus('session: ' + status); return; }
+      try {
+        setStatus('setting up…');
+        await reactor.sendCommand('set_canvas', { aspect: '16:9' });
+        await reactor.sendCommand('set_autoplay', { enabled: false });
+        await reactor.sendCommand('set_seed', { seed: fixedSeed() }); // deterministic across clips
+        setStatus('uploading the view…');
+        seedRef = await reactor.uploadFile(seed);
+        enableDirecting(true);
+        setStatus('ready — the view holds until you give an instruction', 'ok');
+        log(`· view uploaded (${seed.name}); fixed seed ${fixedSeed()}; start+end pinned; waiting for your first instruction`);
+      } catch (e) { setStatus('setup failed: ' + (e?.message || e), 'err'); }
+    });
+
+    setStatus('minting token…');
+    const tok = await (await fetch('/api/token', { method: 'POST' })).json();
+    if (tok.error) { setStatus('token error: ' + tok.error, 'err'); startBtn.disabled = false; return; }
+    setStatus('connecting…');
+    await reactor.connect(tok.jwt);
+  }
+
+  // One instruction → one clip, always anchored to the chosen view.
+  async function direct(instruction) {
+    instruction = (instruction || '').trim();
+    if (/^still hold$/i.test(instruction)) instruction = ''; // "still hold" = no event
+    if (!reactor || !seedRef) return;
+    const start = (lastClipId && anchorEl.value === 'prev') ? { continue_from_clip_id: lastClipId } : { starting_frame: seedRef };
+    const end = pinEndEl.checked ? { ending_frame: seedRef } : {};
+    try {
+      setStatus('generating: ' + (instruction || 'still hold'), 'busy');
+      const reply = await reactor.sendCommand('enqueue', {
+        prompt: buildPrompt(instruction),
+        seconds: Number(secsEl.value),
+        seed: fixedSeed(),            // same seed every clip → repeatable output
+        ...start, ...end,
+      });
+      const id = clipId(reply);
+      if (id) lastClipId = id;
+      log('→ ' + (instruction || 'still hold') + (id ? '  [' + id.slice(0, 8) + ']' : ''));
+    } catch (e) { setStatus('generate failed: ' + (e?.message || e), 'err'); }
+  }
+
+  startBtn.addEventListener('click', startScene);
+  sendBtn.addEventListener('click', () => { direct(directEl.value); directEl.value = ''; });
+  directEl.addEventListener('keydown', (e) => { if (e.key === 'Enter') { direct(directEl.value); directEl.value = ''; } });
+  beatBtns.forEach((b) => b.addEventListener('click', () => direct(b.dataset.p)));
+  runSeqBtn.addEventListener('click', async () => {
+    const lines = seqEl.value.split('\n').map((s) => s.trim());
+    if (!lines.length) return;
+    runSeqBtn.disabled = true;
+    log(`· sequence: ${lines.length} clips, one view, ${pinEndEl.checked ? 'start+end pinned' : 'start pinned'}, seed ${fixedSeed()}, ${secsEl.value}s each`);
+    for (const line of lines) await direct(line);
+    runSeqBtn.disabled = false;
+  });
+
+  window.addEventListener('pagehide', () => { try { reactor && reactor.disconnect(); } catch {} });
+</script>
+</body>
+</html>

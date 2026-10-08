@@ -16,3 +16,6 @@ coverage/
 # Python build artifacts
 __pycache__/
 *.pyc
+
+# Python virtualenvs
+.venv/
