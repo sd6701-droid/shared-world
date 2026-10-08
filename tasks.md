@@ -1,6 +1,15 @@
 # Tasks — The Two Thieves (pass 1)
 
-Four people, four lanes. The full spec is in [`CLAUDE.md`](./CLAUDE.md).
+Pass 1 is three large tasks, plus a supporting lane for keys, integration and the
+demo. Each task has a flowchart in [`plan/`](./plan/). The full spec is in
+[`CLAUDE.md`](./CLAUDE.md).
+
+| # | Task | People | Flowchart |
+|---|---|---|---|
+| 1 | Map and rules | A (server lane), C (rules lane) | [`plan/1-map-and-rules.png`](./plan/1-map-and-rules.png) |
+| 2 | Room contents | C | [`plan/2-room-contents.png`](./plan/2-room-contents.png) |
+| 3 | Agent view rendering | B | [`plan/3-agent-view-rendering.png`](./plan/3-agent-view-rendering.png) |
+| — | Supporting: keys, auth, integration, demo | D | — |
 
 ## Handoffs at a glance
 
@@ -10,6 +19,7 @@ Four people, four lanes. The full spec is in [`CLAUDE.md`](./CLAUDE.md).
 | Hour 1 | D → B | `/api/token` working |
 | Hour 2 | C → A | `server/rules.ts` |
 | Hour 2 | C → B | Seed images in `public/rooms/` |
+| Hour 2 | C → A | Text content (tips, banners, guard lines) |
 | Hour 2 | D → everyone | One-command dev script |
 | Hour 3 | A → B | Running socket |
 | Hour 3 on | D → everyone | Checklist runs and honest bug reports; D stops writing features |
@@ -17,17 +27,39 @@ Four people, four lanes. The full spec is in [`CLAUDE.md`](./CLAUDE.md).
 
 ---
 
-## Person A: server core and map screen
+## Task 1 — Map and rules
 
-**You own:** `server/index.ts`, `shared/types.ts`, `map.json`, `/map`.
+It starts with the contract everyone else needs, then runs two lanes (the
+server and the pure rules) that merge at integration.
 
-**What you build:** the game server that holds the one true state, and the map
-screen the audience watches.
+![Map and rules task flow](./plan/1-map-and-rules.png)
+
+**Flow:** write the contract (`types.ts`, `map.json`, 20 min) → two lanes in
+parallel → integrate (server imports `rules.ts`) → banners + overlay → checklist
+fixes.
+
+| Lane | Owner | Steps |
+|---|---|---|
+| Server | A | Socket server (10 Hz tick, bot client) → Map screen (dots, guard cone, locks) |
+| Rules | C | `rules.ts` (pure functions + tests) → Role filtering (Cameras sees the guard) |
+
+**Files:** `shared/types.ts`, `map.json`, `server/index.ts`, `server/rules.ts`
+and its tests, `/map`.
+
+### Step 1: the contract (A, first 20 minutes)
+
+- Write `shared/types.ts` and `map.json`: 20 × 12 grid, 6 rooms, 2 exits,
+  2 starts, guard route, compass room.
+- Push, and tell everyone to pull.
+- **These two files are the contract.** Announce any later change to them out
+  loud before pushing.
+
+### Server lane (A)
 
 - Socket.IO on port 3001, a 10 Hz tick.
-- State broadcast with per-role filtering. Cameras' payload includes the
-  guard's position and facing and Goggles' last corridor cell. Goggles'
-  payload omits both.
+- A bot client to drive the server before the real play screen exists.
+- State broadcast with per-role filtering (from the rules lane).
+- Until `rules.ts` lands at hour 2, a stub that only moves dots.
 - The map screen draws the floor plan from `map.json` on a canvas:
   - rooms, corridor, exits
   - two labeled dots
@@ -37,88 +69,9 @@ screen the audience watches.
   - the clock
   - a winner overlay
 
-**Done looks like:** two browsers join as different roles, the map shows both
-dots moving and the guard patrolling, and state changes from C's rules appear
-on the map within one tick.
+### Rules lane (C)
 
-**First 20 minutes:** write `shared/types.ts` and `map.json` (20 × 12 grid,
-6 rooms, 2 exits, 2 starts, guard route, compass room), push, and tell everyone
-to pull. **These two files are the contract.** Announce any later change to
-them out loud before pushing.
-
-**You need:** C's `rules.ts` at hour 2. Until then, use a stub that only moves
-dots.
-
-**Others need from you:** `types.ts` and `map.json` by minute 20; a running
-socket by hour 3 for B.
-
-- [ ] `shared/types.ts` + `map.json` pushed (minute 20)
-- [ ] Socket.IO server, 10 Hz tick, per-role filtered broadcast
-- [ ] `/map` canvas: rooms, corridor, exits, dots, guard + cone, hatched locks, compass, clock, winner overlay
-- [ ] Stub rules swapped for C's `rules.ts` (hour 2)
-- [ ] Socket ready for B (hour 3)
-
----
-
-## Person B: room view and model rendering
-
-**You own:** `/play`, the Lingbot session hook, the corridor canvas, the
-minimap, banners.
-
-**What you build:** the player's screen.
-
-- **Outside a room:** a top-down corridor view with the player's dot.
-- **On `roomEnter`:**
-  1. Fetch a JWT from `/api/token`.
-  2. Open a Lingbot-World-2 session.
-  3. Upload the room's seed image.
-  4. Set the lens prompt.
-  5. Start.
-  6. Attach the stream full-screen behind a "door opening" overlay until the
-     first frame.
-- Forward WASD and mouse-look using **the exact command names from the schema
-  page**.
-- **On `roomExit`:** disconnect, tear down, return to the corridor.
-- A 200 px minimap bottom-left. Goggles sees only its own dot; Cameras also
-  sees the guard and its cone.
-- One keyboard hook, so the map move and the room move never disagree.
-- A 60 s idle timeout that closes a session with no input.
-- On any session error: show the seed image as a still with "signal lost" and
-  keep playing.
-
-**Done looks like:** walking into a room opens a stream within 10 s and WASD
-moves the view; leaving closes it and the Reactor dashboard shows zero open
-sessions.
-
-**Start with:** `shared/fixtures.ts`, a fake state stream that fires
-`roomEnter`/`roomExit` every 20 s, so you can test the whole session lifecycle
-before the server exists.
-
-**You need:** D's `/api/token` by hour 1; A's socket by hour 3; C's seed images
-by hour 2 (use any placeholder image before that).
-
-**Others need from you:** nothing until integration.
-
-- [ ] `shared/fixtures.ts` fake state stream
-- [ ] Corridor canvas view
-- [ ] Lingbot session hook: JWT → connect → upload → prompt → start → attach
-- [ ] WASD + mouse-look forwarded with schema command names
-- [ ] Teardown on `roomExit`; 60 s idle timeout
-- [ ] "Signal lost" fallback on session error
-- [ ] Minimap (role-filtered) and banners
-- [ ] Single keyboard hook
-- [ ] Switched from fixtures to A's socket (hour 3)
-
----
-
-## Person C: rules and content
-
-**You own:** `server/rules.ts`, its tests, `scripts/gen-rooms.ts`,
-`public/rooms/`, `beats.json`.
-
-**What you build:** two independent things.
-
-**1. The rules** as pure functions over `GameState`, with unit tests:
+The rules are pure functions over `GameState`, with unit tests:
 
 - movement and locked rooms
 - guard patrol, one cell per second
@@ -129,38 +82,150 @@ by hour 2 (use any placeholder image before that).
 - steal-back when both players are in one room
 - win on exit, loss at zero
 
-**2. The art:** a script that calls the Gemini image API (model name from
-`GEMINI_IMAGE_MODEL`, **never hard-coded**) with one shared style prompt and
-generates `public/rooms/<room>.png` for six rooms plus `archive-compass.png`
-with a brass compass on a lit pedestal. Expect several iterations per room until
-they read as the same museum. Check each image in both lenses.
+**Role filtering:** Cameras' payload includes the guard's position and facing
+and Goggles' last corridor cell. Goggles' payload omits both.
 
-**Also the text:** the two half-tips, the three banners, six guard lines.
+### Integrate → banners + overlay → checklist fixes
 
-**Done looks like:** `pnpm test` passes on the rules; seven images are committed
-and look like one building; A can import `rules.ts` without changing its
-interface.
+- The server imports `rules.ts` **without changing its interface**.
+- Wire banners (text from Task 2) and the winner overlay.
+- Fix whatever D's checklist runs turn up.
 
-**You need:** `map.json` by minute 20; a Gemini key from D.
+**Done looks like:** two browsers join as different roles, the map shows both
+dots moving and the guard patrolling, and state changes from the rules appear on
+the map within one tick. `pnpm test` passes on the rules.
 
-**Others need from you:** images by hour 2 for B; `rules.ts` by hour 2 for A.
-
-- [ ] `server/rules.ts` with all rules above
-- [ ] Unit tests; `pnpm test` passes
-- [ ] `scripts/gen-rooms.ts` (reads `GEMINI_IMAGE_MODEL`)
-- [ ] 7 images committed, consistent, checked in both lenses
-- [ ] `beats.json`: 2 half-tips, 3 banners, 6 guard lines
+- [ ] `shared/types.ts` + `map.json` pushed (minute 20)
+- [ ] Socket server, 10 Hz tick, bot client
+- [ ] `/map` canvas: rooms, corridor, exits, dots, guard + cone, hatched locks, compass, clock
+- [ ] `server/rules.ts` with all rules above; `pnpm test` passes (hour 2)
+- [ ] Per-role state filtering
+- [ ] Server imports `rules.ts`; stub removed
+- [ ] Banners + winner overlay
+- [ ] Socket ready for Task 3 (hour 3)
+- [ ] Checklist fixes
 
 ---
 
-## Person D: keys, auth, integration and the demo
+## Task 2 — Room contents
 
-**You own:** `/settings`, `/api/settings`, `/api/token`, `.env` handling, the
-`pnpm dev` script, README, the acceptance checklist, rehearsals, the pitch.
+The art and the text: seven seed images that read as one museum, and the words
+the game shows.
 
-**What you build, in order:**
+![Room contents task flow](./plan/2-room-contents.png)
 
-1. **The JWT route first**, because B is blocked without it. Exchange
+**Flow:** read rooms (from `map.json`) → style prompt (one museum, night, no
+people) → Nano Banana script (7 images to `public/rooms/`) → review in both
+lenses (↻ regenerate any that drift) → commit images (`<room>.png`,
+`archive-compass.png`) → text content (tips, banners, guard lines) → hand off
+(images to B, text to A, hour 2).
+
+**Owner:** C. **Files:** `scripts/gen-rooms.ts`, `public/rooms/`, `beats.json`.
+
+### Images
+
+- `scripts/gen-rooms.ts` reads the room list from `map.json` and calls the
+  Gemini image API.
+- Model name comes from `GEMINI_IMAGE_MODEL`, **never hard-coded**.
+- One shared style prompt for every room.
+- Outputs `public/rooms/<room>.png` for the six rooms, plus
+  `archive-compass.png` with a brass compass on a lit pedestal.
+- **Review loop:** expect several iterations per room until they read as the
+  same museum. Check each image in **both lenses** (Goggles green night-vision,
+  Cameras black-and-white CCTV) and regenerate any that drift.
+
+### Text (`beats.json`)
+
+- The two half-tips (one for Goggles, one for Cameras)
+- The three banners (leak, lockdown, alarm)
+- Six guard lines
+
+**Done looks like:** seven images are committed and look like one building; the
+text is in `beats.json`; images handed to B and text to A by hour 2.
+
+**You need:** `map.json` by minute 20; a Gemini key from D.
+
+- [ ] `scripts/gen-rooms.ts` (reads `GEMINI_IMAGE_MODEL`)
+- [ ] Shared style prompt settled
+- [ ] 7 images generated, reviewed in both lenses, drifting ones regenerated
+- [ ] Images committed
+- [ ] `beats.json`: 2 half-tips, 3 banners, 6 guard lines
+- [ ] Handed off: images to B, text to A (hour 2)
+
+---
+
+## Task 3 — Agent view rendering
+
+Agent view rendering is the risky one, so it starts with a fake state stream and
+proves the Lingbot session lifecycle before anything else exists. The real
+socket is plugged in last.
+
+![Agent view rendering task flow](./plan/3-agent-view-rendering.png)
+
+**Flow:** fixture state stream (`roomEnter`/`roomExit` every 20 s) → corridor
+view (canvas, own dot only) → get a JWT (`/api/token`, from D by hour 1) → open
+Lingbot session (seed image, lens prompt, start) → forward WASD + look (schema
+command names) → close on exit (idle timeout, error fallback) → swap in the real
+socket (hour 3: minimap, banners).
+
+**Owner:** B. **Files:** `/play`, the Lingbot session hook, the corridor canvas,
+the minimap, banners, `shared/fixtures.ts`.
+
+### Steps
+
+1. **Fixture state stream.** `shared/fixtures.ts` is a fake state stream that
+   fires `roomEnter`/`roomExit` every 20 s, so the whole session lifecycle can
+   be tested before the server exists.
+2. **Corridor view.** Outside a room: a top-down canvas of the corridor with the
+   player's own dot only.
+3. **Get a JWT** from `/api/token` (D delivers it by hour 1).
+4. **Open the Lingbot-World-2 session** on `roomEnter`:
+   1. Upload the room's seed image (use any placeholder until Task 2's images
+      land at hour 2).
+   2. Set the lens prompt.
+   3. Start.
+   4. Attach the stream full-screen behind a "door opening" overlay until the
+      first frame.
+5. **Forward WASD + mouse-look** using **the exact command names from the
+   schema page**. One keyboard hook, so the map move and the room move never
+   disagree.
+6. **Close on exit.**
+   - On `roomExit`: disconnect, tear down, return to the corridor.
+   - A 60 s idle timeout closes a session with no input.
+   - On any session error: show the seed image as a still with "signal lost"
+     and keep playing.
+7. **Swap in the real socket** (hour 3) and add:
+   - the 200 px minimap bottom-left (Goggles: own dot only; Cameras: plus the
+     guard and its cone)
+   - banners
+
+**Done looks like:** walking into a room opens a stream within 10 s and WASD
+moves the view; leaving closes it and the Reactor dashboard shows zero open
+sessions.
+
+**You need:** D's `/api/token` by hour 1; Task 2's seed images by hour 2; A's
+socket by hour 3.
+
+- [ ] `shared/fixtures.ts` fake state stream
+- [ ] Corridor canvas view
+- [ ] JWT from `/api/token`
+- [ ] Lingbot session: upload seed image → lens prompt → start → attach stream
+- [ ] WASD + mouse-look forwarded with schema command names; single keyboard hook
+- [ ] Teardown on `roomExit`; 60 s idle timeout; "signal lost" fallback
+- [ ] Real socket swapped in (hour 3)
+- [ ] Minimap (role-filtered) and banners
+
+---
+
+## Supporting lane — keys, auth, integration and the demo
+
+**Owner:** D. **Files:** `/settings`, `/api/settings`, `/api/token`, `.env`
+handling, the `pnpm dev` script, README, the acceptance checklist, rehearsals,
+the pitch.
+
+**In order:**
+
+1. **The JWT route first**, because Task 3 is blocked without it. Exchange
    `REACTOR_API_KEY` for a session-scoped token via
    `POST https://api.reactor.inc/tokens`; return only the JWT and model slug.
 2. **The settings page:**
@@ -184,9 +249,6 @@ interface.
 
 **You need:** the Reactor and Gemini keys; everyone's branches rebased on `main`
 hourly.
-
-**Others need from you:** `/api/token` by hour 1; the dev script by hour 2;
-honest bug reports from hour 3 on.
 
 - [ ] `/api/token` (hour 1)
 - [ ] `/settings` + `/api/settings` + `.env.local` (git-ignored)
