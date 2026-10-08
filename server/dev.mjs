@@ -21,7 +21,7 @@ const HOST = process.env.HOST || '127.0.0.1';
 const MODELS = ['reactor/lingbot-world-2'];
 
 // Only these are served. Everything else (including .env.local) is 404.
-const ALLOWED = ['/app/', '/shared/', '/lib/', '/server/', '/public/', '/demo-live/rooms50/', '/map.json'];
+const ALLOWED = ['/app/', '/shared/', '/lib/', '/server/', '/public/', '/demo-live/rooms50/', '/corridor/', '/map.json'];
 
 const MIME = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.mjs': 'text/javascript; charset=utf-8',

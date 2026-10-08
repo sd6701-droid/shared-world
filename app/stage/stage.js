@@ -8,14 +8,23 @@ import { ROLES, LABEL, EVENTS } from '../../shared/types.js';
 import { LocalHost } from '../../server/local.js';
 import { viewFor } from '../../server/rules.js';
 import { drawFloor, COLOR, FONT } from '../../lib/floorCanvas.js';
-import { createRoomSession, CORRIDOR } from '../play/roomSession.js';
+import { createRoomSession, placeOf, LOOK } from '../play/roomSession.js';
 import { LENSES } from '../play/lenses.js';
+import { CORRIDOR_PLACES } from '../play/corridor.js';
+
+const CORRIDOR_LABEL = Object.fromEntries(Object.entries(CORRIDOR_PLACES).map(([id, p]) => [id, p.label]));
 
 const MAP_CELL = 44;
 const KEYS = {
   goggles: { w: 'N', a: 'W', s: 'S', d: 'E' },
   cameras: { ArrowUp: 'N', ArrowLeft: 'W', ArrowDown: 'S', ArrowRight: 'E' },
 };
+// look keys turn the live camera only; they never move the thief on the map
+const LOOK_KEYS = {
+  goggles: { q: LOOK.left, e: LOOK.right, t: LOOK.up, g: LOOK.down },
+  cameras: { ',': LOOK.left, '.': LOOK.right, ';': LOOK.up, '/': LOOK.down },
+};
+const isGameKey = (k) => Object.values(KEYS).some((m) => k in m) || Object.values(LOOK_KEYS).some((m) => k in m);
 
 let map;
 try {
@@ -50,16 +59,18 @@ host.onEvent((ev) => {
 });
 host.start();
 
-// keyboard: both roles. A press moves the thief one cell on the map (the host
-// rate-limits repeats); the room view gets the set of held directions, which
-// drives the live camera until the key is released.
+// keyboard: both roles. A move key moves the thief one cell on the map (the host
+// rate-limits repeats) and, while held, walks the live camera the same way. A
+// look key only turns the live camera. Both last until the key is released.
 const held = new Set();
 const normKey = (e) => (e.key.length === 1 ? e.key.toLowerCase() : e.key);
 const heldDirs = (role) => Object.entries(KEYS[role]).filter(([k]) => held.has(k)).map(([, dir]) => dir);
-const syncHeld = () => { for (const role of ROLES) panels[role].session.hold(heldDirs(role)); };
+const heldLooks = (role) => Object.entries(LOOK_KEYS[role]).filter(([k]) => held.has(k)).map(([, look]) => look);
+const heldInputs = (role) => [...heldDirs(role), ...heldLooks(role)];
+const syncHeld = () => { for (const role of ROLES) panels[role].session.hold(heldInputs(role)); };
 window.addEventListener('keydown', (e) => {
   const k = normKey(e);
-  if (k.startsWith('Arrow') || k === ' ') e.preventDefault();
+  if (k.startsWith('Arrow') || k === ' ' || isGameKey(k)) e.preventDefault();
   if (e.repeat) return;
   if (k === 'r') { host.restart(); return; }
   held.add(k);
@@ -101,10 +112,10 @@ function frame() {
     const panel = panels[role];
     const view = viewFor(state, role);
     const me = view.players[role];
-    const place = me.room || CORRIDOR; // every place has an image, the corridor included
-    if (place !== panel.session.room) { panel.session.enter(place); panel.session.hold(heldDirs(role)); }
+    const place = placeOf(map, me); // every place has an image; the corridor is split into halls and links
+    if (place !== panel.session.room) { panel.session.enter(place, me.cell); panel.session.hold(heldInputs(role)); }
 
-    const info = (me.room ? map.rooms[me.room].label : 'Corridor') +
+    const info = (me.room ? map.rooms[me.room].label : CORRIDOR_LABEL[place] || 'Corridor') +
       (me.carrying.length ? ' · carrying ' + me.carrying.map((id) => map.lootById[id].label.toLowerCase()).join(', ') : '') +
       (state.clock < me.penaltyUntil ? ' · <span style="color:' + COLOR.alarm + '">penalty ' + Math.ceil(me.penaltyUntil - state.clock) + ' s</span>' : '') +
       (me.loading ? ' · loading, safe from guard' : '');

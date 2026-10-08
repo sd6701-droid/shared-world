@@ -7,7 +7,7 @@ import { loadMap } from '../../shared/map.js';
 import { ROLES, LABEL } from '../../shared/types.js';
 import { connect } from '../../lib/gameClient.js';
 import { drawFloor, COLOR } from '../../lib/floorCanvas.js';
-import { createRoomSession, CORRIDOR } from './roomSession.js';
+import { createRoomSession, placeOf, LOOK } from './roomSession.js';
 import { LENSES } from './lenses.js';
 
 const params = new URLSearchParams(location.search);
@@ -17,6 +17,8 @@ document.getElementById('who').textContent = LABEL[role].toUpperCase();
 document.getElementById('who').style.color = COLOR[role];
 
 const KEYS = { w: 'N', a: 'W', s: 'S', d: 'E', ArrowUp: 'N', ArrowLeft: 'W', ArrowDown: 'S', ArrowRight: 'E' };
+// look keys turn the live camera only; they never move the thief on the map
+const LOOK_KEYS = { q: LOOK.left, e: LOOK.right, t: LOOK.up, g: LOOK.down };
 const MINI_CELL = 10;
 const map = await loadMap('../../map.json');
 
@@ -50,14 +52,15 @@ window.addEventListener('keydown', (e) => {
   if (k.startsWith('Arrow') || k === ' ') e.preventDefault();
   if (e.repeat) return;
   if (k === 'r') { client.restart(); return; }
-  if (!KEYS[k]) return;
+  if (!KEYS[k] && !LOOK_KEYS[k]) return;
   held.add(k);
-  client.move(KEYS[k]);
-  session.hold(heldDirs());
+  if (KEYS[k]) client.move(KEYS[k]);
+  session.hold(heldInputs());
 });
-// the room view gets the set of held directions: it drives the live camera until release
+// the room view gets the held directions (same as the map) plus held look keys: they drive the live camera until release
 const heldDirs = () => [...new Set(Object.keys(KEYS).filter((k) => held.has(k)).map((k) => KEYS[k]))];
-window.addEventListener('keyup', (e) => { held.delete(normKey(e)); session.hold(heldDirs()); });
+const heldInputs = () => [...heldDirs(), ...Object.keys(LOOK_KEYS).filter((k) => held.has(k)).map((k) => LOOK_KEYS[k])];
+window.addEventListener('keyup', (e) => { held.delete(normKey(e)); session.hold(heldInputs()); });
 window.addEventListener('blur', () => { held.clear(); session.hold([]); });
 setInterval(() => {
   const dir = heldDirs()[0];
@@ -72,8 +75,8 @@ function frame() {
     const me = state.players[role];
 
     // driven by the state, so a late-opened tab catches up
-    const place = me.room || CORRIDOR;
-    if (place !== session.room) { session.enter(place); session.hold(heldDirs()); }
+    const place = placeOf(map, me); // the room, or the part of the corridor
+    if (place !== session.room) { session.enter(place, me.cell); session.hold(heldInputs()); }
 
     drawFloor(miniCtx, map, state, { cell: MINI_CELL, roles: [role], showRoute: false });
 

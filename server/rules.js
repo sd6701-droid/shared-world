@@ -6,7 +6,7 @@ import { ROLES, LABEL, EVENTS } from '../shared/types.js';
 import { DIRS, same } from '../shared/map.js';
 
 export const MOVE_COOLDOWN = 0.25; // s between accepted moves per player (4 moves/s)
-export const GUARD_STEP = 3;       // s per guard step: slow, one cell every 3 s (a lap is 2 min)
+export const GUARD_STEP = 1;       // s per guard step: one cell per second (a lap is 40 s)
 export const CONE_LEN = 3;         // cells ahead the guard can see
 export const PENALTY = 3;          // s frozen at start after a catch
 export const MAX_LOADING = 10;     // s a loading view protects a thief; caps a stuck or closed tab

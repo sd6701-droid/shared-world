@@ -3,23 +3,35 @@
 // Every place (room or corridor) shows its still image. Rooms listed in
 // liveRooms.js also open a Lingbot-World-2 session on entry: seed image +
 // `${scene}, ${lens}` prompt, then the video replaces the still on its first
-// frame. Held movement keys drive the camera. The session is disconnected on
+// frame. The same held keys that move the thief on the map drive the camera,
+// relative to the way the thief walked in; look keys turn it. Disconnected on
 // every way out (leaving the room, restart, idle, tab closed), because it
 // bills per second while open. Commands and the connect/retry flow follow
 // demo-live/index.html, the tested setup.
 //
-// The game never depends on this: on any failure the still stays up with a
-// "signal lost" notice, and the map keeps running.
+// The view shows only the picture (or live video) and the room name. The game
+// never depends on it: on any failure the still stays up and the map keeps running.
 
 import { LIVE_MODEL, LIVE_ROOMS, SDK_URL } from './liveRooms.js';
+import { CORRIDOR_PLACES, corridorPlace, corridorFacing } from './corridor.js';
 
 const IDLE_MS = 60_000;        // close a live session after 60 s without input
-const DOOR_MS = 600;           // "door opening" overlay for still-image rooms
 const CONNECT_TRIES = 24;      // Reactor capacity is shared; a busy pool is retried
 const CONNECT_WAIT_MS = 5_000;
 
+/** Grid directions clockwise, and what each one means relative to the facing. */
+const DIRS = ['N', 'E', 'S', 'W'];
+const RELATIVE = ['forward', 'strafe_right', 'back', 'strafe_left'];
+/** Look keys only turn the camera; the map has no camera angle. */
+export const LOOK = { left: 'look_left', right: 'look_right', up: 'look_up', down: 'look_down' };
+
 /** The corridor is a place too: it has its own image (public/rooms/corridor.png). */
 export const CORRIDOR = 'corridor';
+
+/** The place a thief is in: their room, else their part of the corridor (corridor.js). */
+export function placeOf(map, player) {
+  return player.room || corridorPlace(map, player.cell) || CORRIDOR;
+}
 const CORRIDOR_INFO = { label: 'Corridor', prompt: 'Long museum corridor lined with framed paintings' };
 
 // ---------------------------------------------------------------- shared by every view on the page
@@ -60,68 +72,66 @@ export function createRoomSession({ root, map, role, lens, onLoading = () => {} 
   let room = null;
   let generation = 0;      // bumps on every enter/exit; stale async work checks it and stops
   let loading = false;
+  let shield = true;       // a loading view protects the thief from the guard; not in the corridor, where it patrols
   let idleTimer = null;
-  let doorTimer = null;
   let reactor = null;      // the open live session, if any
   let ready = false;       // the session accepted set_image / set_prompt / start
   let idleClosed = false;  // live session closed for inactivity; the next input reopens it
-  let held = new Set();    // directions currently held: 'N' | 'E' | 'S' | 'W'
-  let sent = { lon: null, lat: null };
+  let held = new Set();    // held inputs: 'N' | 'E' | 'S' | 'W' and LOOK values
+  let facing = 'N';        // the way the thief walked in; forward in the video
+  let sent = { lon: null, lat: null, yaw: null, pitch: null };
   let els = {};
 
   function setLoading(value) {
+    value = value && shield;
     if (value === loading) return;
     loading = value;
     onLoading(value);
   }
 
-  function enter(id) {
+  /** cell: where the thief stands on entering; sets the camera's facing in a corridor place. */
+  function enter(id, cell) {
     if (id === room) return;
     exit({ stillLoading: true });
     room = id;
+    const hall = CORRIDOR_PLACES[id];
+    shield = !hall && id !== CORRIDOR;
+    facing = hall && cell ? corridorFacing(map, cell) : entryFacing(map, id);
     const gen = ++generation;
     setLoading(true);
 
     const live = LIVE_ROOMS[id];
-    const info = map.rooms[id] || CORRIDOR_INFO;
-    const still = live ? live.seed : seedImageUrl(map, id);
+    const info = map.rooms[id] || hall || CORRIDOR_INFO;
+    const still = live ? live.seed : hall ? hall.image : seedImageUrl(map, id);
     root.innerHTML =
       '<img alt="" src="' + still + '">' +
       (live ? '<video autoplay playsinline muted hidden></video>' : '') +
-      '<div class="card" hidden><b>' + info.label.toUpperCase() + '</b><p>' + info.prompt + '</p>' +
-      '<p>No image at <code>' + still + '</code> or <code>' + defaultImageUrl() + '</code>.</p></div>' +
-      '<div class="tag"></div>' +
-      '<div class="overlay' + (id === CORRIDOR ? ' hidden' : '') + '">DOOR OPENING…</div>';
+      '<div class="name">' + escapeHtml(info.label) + '</div>';
     els = {
       img: root.querySelector('img'), video: root.querySelector('video'),
-      card: root.querySelector('.card'), tag: root.querySelector('.tag'), overlay: root.querySelector('.overlay'),
+      name: root.querySelector('.name'),
     };
     root.hidden = false;
 
-    // A still-image place is "loaded" once the picture is up and the door overlay
-    // is gone. A live room is loaded on its first video frame (see startLive).
+    // A still-image place is "loaded" once its picture is up. A live room is
+    // loaded on its first video frame (see startLive).
     let imageReady = false;
-    let doorDone = id === CORRIDOR;
-    const settleStill = () => { if (!live && gen === generation && imageReady && doorDone) setLoading(false); };
+    const settleStill = () => { if (!live && gen === generation && imageReady) setLoading(false); };
     els.img.onload = () => { imageReady = true; settleStill(); };
-    // the place's own image, else the shared default, else a text card
+    // the place's own image, else the shared default, else just the name on black
     els.img.onerror = () => {
       if (!els.img.dataset.fallback) { els.img.dataset.fallback = '1'; els.img.src = defaultImageUrl(); return; }
       els.img.hidden = true;
-      els.card.hidden = false;
       imageReady = true;
       settleStill();
     };
     if (els.img.complete && els.img.naturalWidth) imageReady = true; // already cached
 
     if (live) {
-      setTag('LIVE · LINGBOT-WORLD-2 · connecting');
+      setStatus('live · connecting');
       startLive(gen);
     } else {
-      setTag('STATIC IMAGE');
-      if (!doorDone) {
-        doorTimer = setTimeout(() => { els.overlay.classList.add('hidden'); doorDone = true; settleStill(); }, DOOR_MS);
-      }
+      setStatus('static image');
       settleStill();
     }
     touch();
@@ -146,8 +156,7 @@ export function createRoomSession({ root, map, role, lens, onLoading = () => {} 
         v.hidden = false;
         v.addEventListener('playing', () => {
           if (stale()) return;
-          els.overlay.classList.add('hidden');
-          setTag('LIVE · LINGBOT-WORLD-2');
+          setStatus('live');
           setLoading(false);
         }, { once: true });
         v.play().catch(() => {});
@@ -156,9 +165,9 @@ export function createRoomSession({ root, map, role, lens, onLoading = () => {} 
       instance.on('statusChanged', async (status) => {
         if (stale() || reactor !== instance) return;
         if (status === 'disconnected' && ready) { signalLost('session ended'); return; }
-        if (status !== 'ready') { setTag('LIVE · LINGBOT-WORLD-2 · ' + status); return; }
+        if (status !== 'ready') { setStatus('live · ' + status); return; }
         try {
-          setTag('LIVE · LINGBOT-WORLD-2 · uploading seed');
+          setStatus('live · uploading seed');
           const ref = await instance.uploadFile(seed);
           if (stale()) return;
           await instance.sendCommand('set_image', { image: ref });
@@ -166,7 +175,7 @@ export function createRoomSession({ root, map, role, lens, onLoading = () => {} 
           await instance.sendCommand('start', {});
           if (stale()) return;
           ready = true;
-          setTag('LIVE · LINGBOT-WORLD-2 · starting');
+          setStatus('live · starting');
           sendMoves(true);
         } catch (e) {
           if (!stale()) signalLost('command failed: ' + (e?.message || e));
@@ -175,7 +184,7 @@ export function createRoomSession({ root, map, role, lens, onLoading = () => {} 
 
       for (let attempt = 1; attempt <= CONNECT_TRIES; attempt++) {
         try {
-          setTag('LIVE · LINGBOT-WORLD-2 · connecting' + (attempt > 1 ? ' (try ' + attempt + '/' + CONNECT_TRIES + ')' : ''));
+          setStatus('live · connecting' + (attempt > 1 ? ' (try ' + attempt + '/' + CONNECT_TRIES + ')' : ''));
           await instance.connect(jwt);
           if (stale()) safeDisconnect(instance);
           return;
@@ -183,7 +192,7 @@ export function createRoomSession({ root, map, role, lens, onLoading = () => {} 
           if (stale()) { safeDisconnect(instance); return; }
           const msg = String(e?.message || e);
           if (!/capacity|busy|429|rate.?limit/i.test(msg) || attempt === CONNECT_TRIES) throw e;
-          setTag('LIVE · Reactor busy, retrying in ' + CONNECT_WAIT_MS / 1000 + ' s (try ' + attempt + '/' + CONNECT_TRIES + ')');
+          setStatus('live · Reactor busy, retrying in ' + CONNECT_WAIT_MS / 1000 + ' s (try ' + attempt + '/' + CONNECT_TRIES + ')');
           await new Promise((r) => setTimeout(r, CONNECT_WAIT_MS));
           if (stale()) { safeDisconnect(instance); return; }
         }
@@ -198,25 +207,22 @@ export function createRoomSession({ root, map, role, lens, onLoading = () => {} 
   function signalLost(reason) {
     stopLive();
     if (els.video) els.video.hidden = true;
-    if (els.overlay) {
-      els.overlay.textContent = 'SIGNAL LOST';
-      els.overlay.classList.remove('hidden');
-      els.overlay.classList.add('soft');
-    }
-    setTag('LIVE · signal lost: ' + reason);
+    setStatus('signal lost: ' + reason, true);
     setLoading(false);
   }
 
-  /** Directions currently held for this thief. Drives the live camera; any input resets the idle timer. */
-  function hold(dirs) {
-    held = new Set(dirs);
+  /**
+   * Inputs currently held for this thief: grid directions (the same ones sent to
+   * the map) and LOOK values. Drives the live camera; any input resets the idle timer.
+   */
+  function hold(inputs) {
+    held = new Set(inputs);
     if (!room) return;
     if (held.size) {
       touch();
       if (idleClosed && LIVE_ROOMS[room]) {
         idleClosed = false;
-        els.overlay.textContent = 'RECONNECTING…';
-        els.overlay.classList.remove('soft');
+        setStatus('reconnecting');
         startLive(generation);
       }
     }
@@ -225,11 +231,19 @@ export function createRoomSession({ root, map, role, lens, onLoading = () => {} 
 
   function sendMoves(force) {
     if (!reactor || !ready) return;
-    const lon = held.has('N') ? 'forward' : held.has('S') ? 'back' : 'idle';
-    const lat = held.has('W') ? 'strafe_left' : held.has('E') ? 'strafe_right' : 'idle';
-    if (force || lon !== sent.lon) reactor.sendCommand('set_move_longitudinal', { move_longitudinal: lon }).catch(() => {});
-    if (force || lat !== sent.lat) reactor.sendCommand('set_move_lateral', { move_lateral: lat }).catch(() => {});
-    sent = { lon, lat };
+    // a grid direction becomes forward / back / strafe relative to the way the thief walked in
+    const rel = new Set(DIRS.filter((d) => held.has(d))
+      .map((d) => RELATIVE[(DIRS.indexOf(d) - DIRS.indexOf(facing) + 4) % 4]));
+    const lon = rel.has('forward') ? 'forward' : rel.has('back') ? 'back' : 'idle';
+    const lat = rel.has('strafe_left') ? 'strafe_left' : rel.has('strafe_right') ? 'strafe_right' : 'idle';
+    const yaw = held.has(LOOK.left) ? 'left' : held.has(LOOK.right) ? 'right' : 'idle';
+    const pitch = held.has(LOOK.up) ? 'up' : held.has(LOOK.down) ? 'down' : 'idle';
+    const send = (cmd, args) => reactor.sendCommand(cmd, args).catch(() => {});
+    if (force || lon !== sent.lon) send('set_move_longitudinal', { move_longitudinal: lon });
+    if (force || lat !== sent.lat) send('set_move_lateral', { move_lateral: lat });
+    if (force || yaw !== sent.yaw) send('set_look_horizontal', { look_horizontal: yaw });
+    if (force || pitch !== sent.pitch) send('set_look_vertical', { look_vertical: pitch });
+    sent = { lon, lat, yaw, pitch };
   }
 
   function exit({ stillLoading = false } = {}) {
@@ -239,7 +253,6 @@ export function createRoomSession({ root, map, role, lens, onLoading = () => {} 
     generation++;
     idleClosed = false;
     clearTimeout(idleTimer);
-    clearTimeout(doorTimer);
     stopLive();
     root.innerHTML = '';
     root.hidden = true;
@@ -250,7 +263,7 @@ export function createRoomSession({ root, map, role, lens, onLoading = () => {} 
     const r = reactor;
     reactor = null;
     ready = false;
-    sent = { lon: null, lat: null };
+    sent = { lon: null, lat: null, yaw: null, pitch: null };
     if (els.video) els.video.srcObject = null;
     if (r) safeDisconnect(r);
   }
@@ -258,27 +271,33 @@ export function createRoomSession({ root, map, role, lens, onLoading = () => {} 
   function touch() {
     clearTimeout(idleTimer);
     idleTimer = setTimeout(() => {
-      if (!room || !els.overlay) return;
-      if (reactor) {
-        stopLive();
-        idleClosed = true;
-        els.video.hidden = true;
-        setTag('LIVE · idle, session closed');
-      }
-      els.overlay.textContent = LIVE_ROOMS[room] ? 'IDLE · MOVE TO RECONNECT' : 'IDLE';
-      els.overlay.classList.remove('hidden');
-      els.overlay.classList.add('soft');
+      if (!room || !reactor) return;
+      stopLive();
+      idleClosed = true;
+      els.video.hidden = true; // back to the still; moving reconnects
+      setStatus('idle, session closed');
     }, IDLE_MS);
   }
 
-  function setTag(text) {
-    if (els.tag) els.tag.textContent = role.toUpperCase() + ' LENS · ' + text;
+  // Status never appears on screen (the view is only the picture and the room
+  // name). It is on the element as data-status and in the console for debugging.
+  function setStatus(text, warn = false) {
+    root.dataset.status = text;
+    console[warn ? 'warn' : 'debug']('[' + role + ' view' + (room ? ' · ' + room : '') + '] ' + text);
   }
 
   // every path out: tab closed, navigated away, reloaded
   window.addEventListener('pagehide', () => exit());
 
   return { enter, exit, hold, get room() { return room; }, get live() { return !!reactor; } };
+}
+
+/** The grid direction of the step through this room's door, from outside to inside. North if unknown. */
+function entryFacing(map, roomId) {
+  const door = (map.doors || []).find((d) => d.room === roomId);
+  if (!door) return 'N';
+  const dx = door.cell[0] - door.outside[0], dy = door.cell[1] - door.outside[1];
+  return dy < 0 ? 'N' : dy > 0 ? 'S' : dx > 0 ? 'E' : dx < 0 ? 'W' : 'N';
 }
 
 function safeDisconnect(r) {
@@ -302,3 +321,8 @@ export function seedImageUrl(map, roomId) {
 export function defaultImageUrl() {
   return seedImageUrl(null, 'default');
 }
+
+function escapeHtml(t) {
+  return String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+}
+

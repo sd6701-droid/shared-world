@@ -174,14 +174,14 @@ test('one thief per room: moving around inside your own room and the corridor is
   assert.ok(same(s.players.goggles.cell, [3, 1]), 'moving within the Lobby still works');
 });
 
-test('guard: slow, one cell per GUARD_STEP seconds; penalty is 3 s', () => {
+test('guard: one cell per GUARD_STEP seconds; penalty is 3 s', () => {
   const s = newGame(map);
   const start = s.guard.cell;
   tick(s, map, GUARD_STEP - 0.1);
   assert.ok(same(s.guard.cell, start), 'has not moved before GUARD_STEP');
   tick(s, map, 0.1);
   assert.ok(!same(s.guard.cell, start), 'moves at GUARD_STEP');
-  assert.equal(GUARD_STEP, 3);
+  assert.equal(GUARD_STEP, 1);
   assert.equal(PENALTY, 3);
 });
 
