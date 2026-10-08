@@ -7,7 +7,7 @@ import { loadMap } from '../../shared/map.js';
 import { ROLES, LABEL } from '../../shared/types.js';
 import { connect } from '../../lib/gameClient.js';
 import { drawFloor, COLOR } from '../../lib/floorCanvas.js';
-import { createRoomSession, placeOf, LOOK } from './roomSession.js';
+import { createRoomSession, placeOf, stepBetween, LOOK } from './roomSession.js';
 import { LENSES } from './lenses.js';
 
 const params = new URLSearchParams(location.search);
@@ -68,6 +68,7 @@ setInterval(() => {
 }, 50);
 
 let lastScore = '', lastBanners = '';
+let lastCell = null;
 function frame() {
   const waiting = !state || performance.now() - lastStateAt > 2000;
   document.getElementById('waiting').hidden = !waiting;
@@ -76,7 +77,10 @@ function frame() {
 
     // driven by the state, so a late-opened tab catches up
     const place = placeOf(map, me); // the room, or the part of the corridor
+    const moved = stepBetween(lastCell, me.cell); // a step the game accepted, never a key the map refused
+    lastCell = [...me.cell];
     if (place !== session.room) { session.enter(place, me.cell); session.hold(heldInputs()); }
+    else if (moved) session.step(moved); // the video walks the same step as the dot
 
     drawFloor(miniCtx, map, state, { cell: MINI_CELL, roles: [role], showRoute: false });
 

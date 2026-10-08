@@ -8,7 +8,7 @@ import { ROLES, LABEL, EVENTS } from '../../shared/types.js';
 import { LocalHost } from '../../server/local.js';
 import { viewFor } from '../../server/rules.js';
 import { drawFloor, COLOR, FONT } from '../../lib/floorCanvas.js';
-import { createRoomSession, placeOf, LOOK } from '../play/roomSession.js';
+import { createRoomSession, placeOf, stepBetween, LOOK } from '../play/roomSession.js';
 import { LENSES } from '../play/lenses.js';
 import { CORRIDOR_PLACES } from '../play/corridor.js';
 
@@ -60,8 +60,9 @@ host.onEvent((ev) => {
 host.start();
 
 // keyboard: both roles. A move key moves the thief one cell on the map (the host
-// rate-limits repeats) and, while held, walks the live camera the same way. A
-// look key only turns the live camera. Both last until the key is released.
+// rate-limits repeats and refuses walls). The live camera follows the steps the
+// map accepts (see frame()), not the key. A look key only turns the live camera,
+// for as long as it is held.
 const held = new Set();
 const normKey = (e) => (e.key.length === 1 ? e.key.toLowerCase() : e.key);
 const heldDirs = (role) => Object.entries(KEYS[role]).filter(([k]) => held.has(k)).map(([, dir]) => dir);
@@ -113,7 +114,10 @@ function frame() {
     const view = viewFor(state, role);
     const me = view.players[role];
     const place = placeOf(map, me); // every place has an image; the corridor is split into halls and links
+    const moved = stepBetween(panel.cell, me.cell); // a step the game accepted, never a key the map refused
+    panel.cell = [...me.cell];
     if (place !== panel.session.room) { panel.session.enter(place, me.cell); panel.session.hold(heldInputs(role)); }
+    else if (moved) panel.session.step(moved); // the video walks the same step as the dot
 
     const info = (me.room ? map.rooms[me.room].label : CORRIDOR_LABEL[place] || 'Corridor') +
       (me.carrying.length ? ' · carrying ' + me.carrying.map((id) => map.lootById[id].label.toLowerCase()).join(', ') : '') +
