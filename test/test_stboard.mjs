@@ -67,7 +67,7 @@ for (let i = 0; i < 300; i++) h.applyAction(0, { forward: 1 }, 1 / 60);
 ok(h0.pos[2] < h.door.pos[1] - 1, "open door allows passage (crosses to far side)");
 
 // 7. environments load and differ
-ok(Object.keys(ENVIRONMENTS).length === 3, "three environments");
+ok(Object.keys(ENVIRONMENTS).length === 4, "four environments");
 const env2 = new STBoard("forest");
 ok(env2.envName === "forest" && env2.prompt.includes("forest"), "forest env loads with prompt");
 

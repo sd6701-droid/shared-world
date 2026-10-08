@@ -33,8 +33,8 @@ export const ENVIRONMENTS = {
     ],
     door: { pos: [0, 16], yaw: 0, color: 0xd98c3b },
     spawn: [
-      { pos: [-2, 0, -16], yaw: Math.PI },
-      { pos: [2, 0, -16], yaw: Math.PI },
+      { pos: [0, 0, -4], yaw: Math.PI }, // faces +z, toward player 2
+      { pos: [0, 0, 4], yaw: 0 }, // faces -z, toward player 1
     ],
   },
   forest: {
@@ -55,8 +55,8 @@ export const ENVIRONMENTS = {
     ],
     door: { pos: [0, 16], yaw: 0, color: 0xc9a24b },
     spawn: [
-      { pos: [-2, 0, -16], yaw: Math.PI },
-      { pos: [2, 0, -16], yaw: Math.PI },
+      { pos: [0, 0, -4], yaw: Math.PI }, // faces +z, toward player 2
+      { pos: [0, 0, 4], yaw: 0 }, // faces -z, toward player 1
     ],
   },
   room: {
@@ -73,8 +73,34 @@ export const ENVIRONMENTS = {
     ],
     door: { pos: [0, -6], yaw: 0, color: 0x8a5a2b },
     spawn: [
-      { pos: [-2, 0, 7], yaw: 0 }, // facing -z, toward the door
-      { pos: [2, 0, 7], yaw: 0 },
+      { pos: [0, 0, -2], yaw: Math.PI }, // faces +z, toward player 2 (door behind)
+      { pos: [0, 0, 5], yaw: 0 }, // faces -z, toward player 1
+    ],
+  },
+  minecraft: {
+    label: "Minecraft",
+    prompt: "Minecraft, blocky voxel world, pixelated cubic blocks, grass dirt and stone, sunny day",
+    // SMALL, enclosed arena — a little walled room so the two views stay tight
+    // and the pixel-block structure is simple/consistent for the re-skin.
+    ground: { size: 18, color: 0x6abe30 }, // grass
+    sky: 0x86b5ff,
+    obstacles: [
+      // block walls around a ~16x16 space (stone)
+      { pos: [0, -8], size: [18, 1], height: 4, color: 0x8f8f8f }, // back wall
+      { pos: [0, 8], size: [18, 1], height: 4, color: 0x8f8f8f }, // front wall
+      { pos: [-8, 0], size: [1, 18], height: 4, color: 0x8f8f8f }, // left wall
+      { pos: [8, 0], size: [1, 18], height: 4, color: 0x8f8f8f }, // right wall
+      // a dirt mound + a stone block, off the face-off lane
+      { pos: [-5, -5], size: [2, 2], height: 2, color: 0x9c6a43 }, // dirt
+      { pos: [5, 5], size: [2, 2], height: 1, color: 0x8f8f8f }, // stone
+      // a tree in a corner: trunk collides, leaves float (walk under)
+      { pos: [5, -5], size: [1, 1], height: 3, color: 0x7a5a37 }, // trunk
+      { pos: [5, -5], size: [3, 3], height: 2, color: 0x4ca63c, baseY: 3, noCollide: true }, // leaves
+    ],
+    door: { pos: [0, -6], yaw: 0, color: 0xb9802b }, // a block "door" to toggle
+    spawn: [
+      { pos: [0, 0, -3], yaw: Math.PI }, // faces +z, toward player 2
+      { pos: [0, 0, 3], yaw: 0 }, // faces -z, toward player 1 (door beyond)
     ],
   },
 };
@@ -106,6 +132,8 @@ export class STBoard {
       size: [...o.size],
       height: o.height,
       color: o.color,
+      baseY: o.baseY || 0, // elevated base (e.g. floating tree leaves)
+      noCollide: !!o.noCollide, // decorative blocks you can walk under
     }));
     // the single shared, mutable interaction (the "money shot" consistency proof)
     this.door = { ...env.door, open: false };
@@ -171,6 +199,7 @@ export class STBoard {
     const px = axis === "x" ? to : fixed;
     const pz = axis === "x" ? fixed : to;
     for (const o of this.obstacles) {
+      if (o.noCollide) continue; // decorative/floating blocks (e.g. tree leaves)
       if (this._circleHitsBox(px, pz, o)) return false;
     }
     // the door blocks only while closed

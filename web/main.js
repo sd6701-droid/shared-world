@@ -5,7 +5,7 @@
 // it; it never invents world content. See CLAUDE.md §2, §4.
 
 import * as THREE from "three";
-import { STBoard, ENVIRONMENTS, CONSTANTS } from "./stboard.js?v=4";
+import { STBoard, ENVIRONMENTS, CONSTANTS } from "./stboard.js?v=7";
 
 // ---------------------------------------------------------------------------
 // State
@@ -23,6 +23,14 @@ document.getElementById("app").appendChild(renderer.domElement);
 const capRenderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
 capRenderer.setSize(512, 512);
 capRenderer.shadowMap.enabled = true;
+
+// Minimap gets its OWN on-top canvas so it stays visible even when the
+// World-model overlays cover the panes — lets you map both players live.
+const miniRenderer = new THREE.WebGLRenderer({
+  canvas: document.getElementById("minimap-canvas"),
+  antialias: true,
+});
+miniRenderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 
 // One scene, rebuilt when the environment changes. Agent avatars + door are
 // kept as handles so we can sync them to the STBoard every frame.
@@ -110,9 +118,33 @@ function wallTexture(baseHex) {
   });
 }
 
+const clampByte = (v) => Math.max(0, Math.min(255, v)) | 0;
+
+function blockTexture(baseHex) {
+  // true 16x16 Minecraft-style block: per-pixel noise, NO smoothing. Crisp
+  // pixels give SDXL-Turbo a simple, stable structure -> consistent re-skin.
+  const r = (baseHex >> 16) & 255;
+  const g = (baseHex >> 8) & 255;
+  const b = baseHex & 255;
+  const t = makeCanvasTexture((ctx, S) => {
+    for (let y = 0; y < S; y++) {
+      for (let x = 0; x < S; x++) {
+        const d = (Math.random() - 0.5) * 0.28;
+        ctx.fillStyle = `rgb(${clampByte(r * (1 + d))},${clampByte(g * (1 + d))},${clampByte(b * (1 + d))})`;
+        ctx.fillRect(x, y, 1, 1);
+      }
+    }
+  }, 16);
+  t.magFilter = THREE.NearestFilter;
+  t.minFilter = THREE.NearestFilter;
+  t.generateMipmaps = false;
+  return t;
+}
+
 function obstacleTexture(envName, baseHex) {
   if (envName === "street") return facadeTexture(baseHex);
   if (envName === "forest") return barkTexture(baseHex);
+  if (envName === "minecraft") return blockTexture(baseHex);
   return wallTexture(baseHex);
 }
 
@@ -147,18 +179,26 @@ function buildScene() {
   sun.shadow.camera.far = 80;
   scene.add(sun);
 
-  // ground (subtle noise so it doesn't read as a flat slab up close)
+  // ground
   const groundGeo = new THREE.PlaneGeometry(board.ground.size, board.ground.size);
-  const groundTex = makeCanvasTexture((ctx, S) => {
-    ctx.fillStyle = hex2css(board.ground.color);
-    ctx.fillRect(0, 0, S, S);
-    for (let i = 0; i < 1400; i++) {
-      const d = Math.random() * 0.05;
-      ctx.fillStyle = Math.random() > 0.5 ? `rgba(0,0,0,${d})` : `rgba(255,255,255,${d})`;
-      ctx.fillRect(Math.random() * S, Math.random() * S, 2, 2);
-    }
-  });
-  groundTex.repeat.set(board.ground.size / 2, board.ground.size / 2);
+  let groundTex;
+  if (board.envName === "minecraft") {
+    // pixel grass, one block per world unit
+    groundTex = blockTexture(board.ground.color);
+    groundTex.repeat.set(board.ground.size, board.ground.size);
+  } else {
+    // subtle noise so it doesn't read as a flat slab up close
+    groundTex = makeCanvasTexture((ctx, S) => {
+      ctx.fillStyle = hex2css(board.ground.color);
+      ctx.fillRect(0, 0, S, S);
+      for (let i = 0; i < 1400; i++) {
+        const d = Math.random() * 0.05;
+        ctx.fillStyle = Math.random() > 0.5 ? `rgba(0,0,0,${d})` : `rgba(255,255,255,${d})`;
+        ctx.fillRect(Math.random() * S, Math.random() * S, 2, 2);
+      }
+    });
+    groundTex.repeat.set(board.ground.size / 2, board.ground.size / 2);
+  }
   const groundMat = new THREE.MeshStandardMaterial({ map: groundTex, roughness: 0.95 });
   const ground = new THREE.Mesh(groundGeo, groundMat);
   ground.rotation.x = -Math.PI / 2;
@@ -176,11 +216,16 @@ function buildScene() {
   for (const o of board.obstacles) {
     const geo = new THREE.BoxGeometry(o.size[0], o.height, o.size[1]);
     const tex = obstacleTexture(board.envName, o.color);
-    // tile ~every 3 units so window/bark scale stays constant across box sizes
-    tex.repeat.set(Math.max(1, Math.round(o.size[0] / 3)), Math.max(1, Math.round(o.height / 3)));
+    if (board.envName === "minecraft") {
+      // one block texture per world unit -> big boxes read as many 1x1 blocks
+      tex.repeat.set(Math.max(1, Math.round(o.size[0])), Math.max(1, Math.round(o.height)));
+    } else {
+      // tile ~every 3 units so window/bark scale stays constant across box sizes
+      tex.repeat.set(Math.max(1, Math.round(o.size[0] / 3)), Math.max(1, Math.round(o.height / 3)));
+    }
     const mat = new THREE.MeshStandardMaterial({ map: tex, color: 0xffffff, roughness: 0.85 });
     const box = new THREE.Mesh(geo, mat);
-    box.position.set(o.pos[0], o.height / 2, o.pos[1]);
+    box.position.set(o.pos[0], (o.baseY || 0) + o.height / 2, o.pos[1]);
     box.castShadow = true;
     box.receiveShadow = true;
     const edges = new THREE.LineSegments(
@@ -402,13 +447,11 @@ function loop(now) {
   renderViewport(cam0, 0, 0, half, H);
   renderViewport(cam1, half, 0, W - half, H);
 
-  // minimap: top-center, small square (the "one state, two views" proof)
-  const mm = Math.floor(Math.min(W, H) * 0.22);
-  const mmX = Math.floor(W / 2 - mm / 2);
-  const mmY = H - mm - 12;
-  renderViewport(minimapCam, mmX, mmY, mm, mm);
-
   renderer.setScissorTest(false);
+
+  // minimap into its own always-on-top canvas (shows both players, even in
+  // World-model mode). minimapCam has both avatar layers enabled.
+  miniRenderer.render(scene, minimapCam);
 
   // Option A: kick off re-skins (non-blocking; each skips if one is in flight)
   if (WM.enabled) {
@@ -444,6 +487,8 @@ function resize() {
   const w = window.innerWidth;
   const h = window.innerHeight;
   renderer.setSize(w, h);
+  const mm = Math.floor(Math.min(w, h) * 0.2);
+  miniRenderer.setSize(mm, mm);
 }
 window.addEventListener("resize", resize);
 

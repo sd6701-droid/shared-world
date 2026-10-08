@@ -62,10 +62,18 @@
       .wm-status.err { color: #ffb3b3; border-color: #ff6b6b; }
       /* neural overlays sit above the GL canvas, below the HUD */
       .nn-overlay { position: fixed; top: 0; bottom: 0; z-index: 2; display: none;
-        object-fit: cover; pointer-events: none; }
+        object-fit: cover; pointer-events: none; image-rendering: pixelated; }
       #nn-0 { left: 0; width: 50%; }
       #nn-1 { left: 50%; width: 50%; }
       body.wm-on .nn-overlay { display: block; }
+      /* minimap sits above the overlays (z 2) but below the HUD (z 5-6) */
+      #minimap-wrap { position: fixed; z-index: 4; top: 66px; left: 50%;
+        transform: translateX(-50%); display: flex; flex-direction: column;
+        align-items: center; gap: 3px; pointer-events: none; }
+      #minimap-canvas { border: 1px solid rgba(255,255,255,0.35); border-radius: 6px;
+        background: rgba(0,0,0,0.35); box-shadow: 0 4px 16px rgba(0,0,0,0.4); }
+      #minimap-cap { font-size: 10px; font-weight: 700; letter-spacing: 0.08em;
+        color: #e8ecf2; background: rgba(0,0,0,0.5); padding: 2px 9px; border-radius: 999px; }
       .minimap-tag { position: fixed; top: 10px; left: 50%; transform: translateX(-50%) translateY(2px);
         z-index: 4; display: none; }
     </style>
@@ -79,6 +87,13 @@
 
     <div id="label-1" class="pane-label">◉ Player 1</div>
     <div id="label-2" class="pane-label">◉ Player 2</div>
+
+    <!-- minimap in its OWN on-top canvas, so it stays visible over the
+         World-model overlays (maps both players live) -->
+    <div id="minimap-wrap">
+      <canvas id="minimap-canvas"></canvas>
+      <div id="minimap-cap">MAP · both players</div>
+    </div>
 
     <div class="topbar">
       <span class="title">SHARED WORLD · one state → two views</span>
@@ -114,6 +129,6 @@
         }
       }
     </script>
-    <script type="module" src="./main.js?v=4"></script>
+    <script type="module" src="./main.js?v=7"></script>
   </body>
 </html>
