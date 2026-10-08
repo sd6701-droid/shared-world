@@ -1,0 +1,19 @@
+# model weights (downloaded on HPC, huge)
+lingbot-world-base-cam/
+lingbot-world-base-cam-nf4/
+*.safetensors
+*.ckpt
+*.npy
+
+# python
+.venv/
+__pycache__/
+*.pyc
+
+# os / editor
+.DS_Store
+*.log
+
+# demo captures (keep out of git; link in demo/pitch.md)
+demo/*.mov
+demo/*.mp4

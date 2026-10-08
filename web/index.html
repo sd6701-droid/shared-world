@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Shared World — one state, two views</title>
+    <style>
+      :root {
+        --p1: #4fd1ff;
+        --p2: #ff8f5f;
+        --bg: #0d0f14;
+        --fg: #e8ecf2;
+      }
+      * { box-sizing: border-box; }
+      html, body { margin: 0; height: 100%; overflow: hidden; background: var(--bg); color: var(--fg);
+        font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+      #app { position: fixed; inset: 0; }
+      canvas { display: block; }
+
+      /* split-screen divider + per-pane labels (overlay, not part of the GL render) */
+      .divider { position: fixed; top: 0; bottom: 0; left: 50%; width: 2px; margin-left: -1px;
+        background: rgba(255,255,255,0.25); pointer-events: none; z-index: 5; }
+      .pane-label { position: fixed; top: 12px; z-index: 6; font-weight: 700; font-size: 13px;
+        letter-spacing: 0.08em; text-transform: uppercase; padding: 6px 12px; border-radius: 999px;
+        background: rgba(0,0,0,0.45); backdrop-filter: blur(6px); }
+      #label-1 { left: 16px; color: var(--p1); border: 1px solid var(--p1); }
+      #label-2 { right: 16px; color: var(--p2); border: 1px solid var(--p2); }
+
+      /* top-center title + door state */
+      .topbar { position: fixed; top: 10px; left: 50%; transform: translateX(-50%); z-index: 6;
+        display: flex; align-items: center; gap: 12px; }
+      .topbar .title { font-weight: 700; font-size: 13px; opacity: 0.85; }
+      .pill { font-weight: 800; font-size: 12px; padding: 5px 10px; border-radius: 999px;
+        transition: box-shadow 0.15s; }
+      .pill.closed { background: #40242b; color: #ffb3b3; border: 1px solid #ff6b6b; }
+      .pill.open { background: #1f3a2a; color: #9effc0; border: 1px solid #3ddc84; }
+
+      /* bottom controls legend */
+      .legend { position: fixed; bottom: 12px; left: 50%; transform: translateX(-50%); z-index: 6;
+        display: flex; gap: 22px; align-items: center; background: rgba(0,0,0,0.5);
+        border: 1px solid rgba(255,255,255,0.12); padding: 10px 16px; border-radius: 12px;
+        backdrop-filter: blur(8px); font-size: 12px; }
+      .legend b { font-size: 12px; }
+      .legend .p1 b { color: var(--p1); }
+      .legend .p2 b { color: var(--p2); }
+      kbd { background: #222630; border: 1px solid #3a4150; border-bottom-width: 2px; border-radius: 5px;
+        padding: 1px 6px; font-family: ui-monospace, monospace; font-size: 11px; }
+      .sep { width: 1px; align-self: stretch; background: rgba(255,255,255,0.12); }
+
+      /* env switcher */
+      .controls { position: fixed; top: 12px; left: 50%; transform: translateX(-50%) translateY(26px);
+        z-index: 6; display: flex; gap: 10px; align-items: center; font-size: 12px; }
+      select { background: #1a1e27; color: var(--fg); border: 1px solid #333b49; border-radius: 8px;
+        padding: 5px 8px; font-size: 12px; }
+      #prompt-line { opacity: 0.6; font-style: italic; max-width: 40ch; }
+      .minimap-tag { position: fixed; top: 10px; left: 50%; transform: translateX(-50%) translateY(2px);
+        z-index: 4; display: none; }
+    </style>
+  </head>
+  <body>
+    <div id="app"></div>
+    <div class="divider"></div>
+
+    <div id="label-1" class="pane-label">◉ Player 1</div>
+    <div id="label-2" class="pane-label">◉ Player 2</div>
+
+    <div class="topbar">
+      <span class="title">SHARED WORLD · one state → two views</span>
+      <span>Door:</span>
+      <span id="door-state" class="pill closed">CLOSED</span>
+    </div>
+
+    <div class="controls">
+      <label>Environment:
+        <select id="env-select"></select>
+      </label>
+      <span id="prompt-line"></span>
+    </div>
+
+    <div class="legend">
+      <span class="p1"><b>Player 1</b> &nbsp;<kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> move ·
+        <kbd>Q</kbd><kbd>E</kbd> turn · <kbd>Space</kbd> door</span>
+      <span class="sep"></span>
+      <span class="p2"><b>Player 2</b> &nbsp;<kbd>↑</kbd><kbd>←</kbd><kbd>↓</kbd><kbd>→</kbd> move ·
+        <kbd>,</kbd><kbd>.</kbd> turn · <kbd>Enter</kbd> door</span>
+    </div>
+
+    <!-- three.js r160, pinned, no build step -->
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js"
+        }
+      }
+    </script>
+    <script type="module" src="./main.js"></script>
+  </body>
+</html>
