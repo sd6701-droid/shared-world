@@ -1,0 +1,9 @@
+This project adapts patterns from Reactor's open-source examples:
+
+- reactor-team/reactor-cookbook, examples/world-model-arcade (Apache-2.0):
+  the world-contract prompt shape, held actions, the jump pose arc, the
+  frame-signature coherence score (lib/consistency.ts) and "return to first frame".
+- reactor-team/create-reactor-app, templates/vidu-s2-avatar,
+  templates/h3-reference-turbo-realtime and templates/lingbot-world-2
+  (Apache-2.0): the scoped token route, the memoized token resolver, the
+  avatar-then-call lifecycle, and the six-section reference prompt.

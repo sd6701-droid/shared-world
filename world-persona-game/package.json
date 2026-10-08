@@ -1,0 +1,26 @@
+{
+  "name": "world-persona-game",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@reactor-models/h3-reference-to-video-turbo-realtime": "^0.5.5",
+    "@reactor-models/lingbot-world-2": "^1.0.1",
+    "@reactor-models/vidu-s2-avatar": "^0.5.0",
+    "@reactor-team/js-sdk": "^3.1.0",
+    "next": "15.5.9",
+    "react": "19.2.3",
+    "react-dom": "19.2.3"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "typescript": "^5"
+  }
+}
