@@ -41,15 +41,17 @@ The compute node has **no internet**. Do all downloading on the **login node**.
    ```
 
 2. **GPU compute node (no internet):** read from the shared filesystem, run offline.
+   SDXL-Turbo needs only **one GPU** (~7 GB fp16 weights), so request one:
    ```bash
-   srun --partition=a100_dev --gres=gpu:a100:4 --cpus-per-task=16 --mem=128G \
+   srun --partition=a100_dev --gres=gpu:a100:1 --cpus-per-task=8 --mem=48G \
      --time=04:00:00 --pty bash
    source .venv/bin/activate
    export HF_HOME=$SCRATCH/hf HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1
    cd render_server && uvicorn app:app --host 0.0.0.0 --port 8000
    # /health should now report backend "cuda"
    ```
-   (SDXL-Turbo uses ~1 GPU; the other A100s are free for a bigger model later.)
+   Both agents' requests serialize on the single GPU (a lock in sdxl_runner.py),
+   so the overlay refreshes a few times/sec per agent — fine for the demo.
 
 3. **Reach it from your laptop — SSH tunnel through the login node:**
    ```bash

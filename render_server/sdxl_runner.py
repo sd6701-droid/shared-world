@@ -14,12 +14,16 @@ be built and tested without a GPU.
 import base64
 import io
 import os
+import threading
 
 from PIL import Image
 
 MODEL_ID = os.environ.get("SDXL_TURBO_ID", "stabilityai/sdxl-turbo")
 _pipe = None
 _backend = None  # "cuda" | "mps" | "cpu" | "stub"
+# One GPU + one pipeline: serialize so the two agents' requests queue instead
+# of racing the (non-thread-safe) diffusers pipeline.
+_lock = threading.Lock()
 
 
 def _device():
@@ -40,6 +44,14 @@ def _load():
     global _pipe, _backend
     if _pipe is not None or _backend == "stub":
         return _pipe
+    with _lock:
+        if _pipe is not None or _backend == "stub":  # double-checked under lock
+            return _pipe
+        return _load_locked()
+
+
+def _load_locked():
+    global _pipe, _backend
     dev = _device()
     if dev is None:
         _backend = "stub"
@@ -97,14 +109,15 @@ def reskin(image_b64: str, prompt: str, strength: float = 0.5, steps: int = 2, s
     gen = torch.manual_seed(seed)  # fixed per-agent seed reduces flicker
     # SDXL-Turbo: guidance_scale must be 0.0, and steps*strength must be >= 1.
     eff_steps = max(2, int(steps))
-    out = pipe(
-        prompt=prompt or "photorealistic, detailed, natural lighting",
-        image=img,
-        num_inference_steps=eff_steps,
-        strength=float(strength),
-        guidance_scale=0.0,
-        generator=gen,
-    ).images[0]
+    with _lock:  # one GPU -> serialize the two agents' inferences
+        out = pipe(
+            prompt=prompt or "photorealistic, detailed, natural lighting",
+            image=img,
+            num_inference_steps=eff_steps,
+            strength=float(strength),
+            guidance_scale=0.0,
+            generator=gen,
+        ).images[0]
     return _encode(out)
 
 
