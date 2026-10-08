@@ -1,20 +1,20 @@
 #!/usr/bin/env bash
-# download_models.sh — fetch LingBot-World weights for Option A (run on the HPC).
-# See CLAUDE.md §6. Big downloads — do this early on the cluster, not your laptop.
+# download_models.sh — fetch the Option A model weights ON THE LOGIN NODE
+# (ultraviolet-ln1, which has internet). The GPU/compute node has NO internet,
+# so it later reads these from shared storage with HF_HUB_OFFLINE=1.
+#
+# Put the HF cache on SHARED storage both nodes can see (so set HF_HOME to a
+# scratch/home path, NOT a node-local /tmp).
 set -euo pipefail
+
+export HF_HOME="${HF_HOME:-$HOME/.cache/huggingface}"
+echo "Downloading into HF cache: $HF_HOME"
 
 pip install "huggingface_hub[cli]"
 
-# camera-pose base model (our pose -> view interface)
-huggingface-cli download robbyant/lingbot-world-base-cam \
-  --local-dir ./lingbot-world-base-cam
+# Renderer: SDXL-Turbo (fast image-to-image "re-skin"). ~ a few GB.
+huggingface-cli download stabilityai/sdxl-turbo
 
-# fast variant (into the expected subdir)
-huggingface-cli download robbyant/lingbot-world-fast \
-  --local-dir ./lingbot-world-base-cam/lingbot_world_fast
-
-# 4-bit community quant for <8 GPU setups (inference only, third-party)
-huggingface-cli download cahlen/lingbot-world-base-cam-nf4 \
-  --local-dir ./lingbot-world-base-cam-nf4
-
-echo "Done. Validate with Option A step A1 (single frame) before anything else."
+echo
+echo "Done. On the GPU node, run offline with:"
+echo "  export HF_HOME=$HF_HOME HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1"

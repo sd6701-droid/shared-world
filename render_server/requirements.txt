@@ -1,0 +1,12 @@
+# Option A render service. Install torch to match your CUDA (HPC module) FIRST,
+# then the rest. On the login node (has internet); the compute node runs offline.
+fastapi>=0.110
+uvicorn[standard]>=0.29
+pydantic>=2.5
+pillow>=10.0
+# torch: install the build matching your cluster CUDA, e.g.
+#   pip install torch --index-url https://download.pytorch.org/whl/cu121
+torch>=2.2.0
+diffusers>=0.30.0
+transformers>=4.40.0
+accelerate>=0.30.0

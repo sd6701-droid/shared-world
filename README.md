@@ -29,6 +29,26 @@ python3 -m http.server 8777
 - Switch worlds with the **Environment** dropdown (street / forest / room).
 - Top-center **minimap** shows the one world with both agents' positions.
 
+## Option A — world-model renderer (SDXL-Turbo live re-skin)
+
+Same STBoard, same per-agent loop — only the renderer changes. The browser
+captures each agent's crude three.js frame, sends it to a FastAPI service that
+re-skins it with **SDXL-Turbo** (image-to-image), and overlays the result.
+Because both frames come from the one STBoard, both re-skins stay structurally
+consistent. Classical rendering stays underneath as the always-works fallback.
+
+```bash
+# local dev (no GPU — stub echoes the crude frame so the loop is testable):
+cd render_server
+python -m venv .venv && source .venv/bin/activate
+pip install fastapi "uvicorn[standard]" pillow
+uvicorn app:app --host 127.0.0.1 --port 8000
+# in the web demo: tick "World model (SDXL-Turbo)", URL http://localhost:8000
+```
+
+On the GPU (air-gapped) cluster, download weights on the login node and run the
+service offline on an A100 — full steps in [`render_server/README.md`](./render_server/README.md).
+
 ## Layout
 ```
 web/           Option C — three.js game (index.html, main.js, stboard.js)

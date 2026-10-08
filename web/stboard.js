@@ -11,57 +11,78 @@
 // prompt (see CLAUDE.md §8). Structure is identical across environments, so
 // consistency is automatic.
 // ---------------------------------------------------------------------------
+// Each env leaves an OPEN central corridor/clearing and lines obstacles along
+// the sides, with spawn points looking down the open space — so the default
+// view shows the whole scene instead of a wall in your face.
+// obstacles: axis-aligned boxes {pos:[x,z], size:[w,d], height, color}
+// spawn: [{pos:[x,y,z], yaw}, ...] — one per agent (see core invariant below).
 export const ENVIRONMENTS = {
   street: {
     label: "City Street",
     prompt: "two people walking side by side, city street, daytime",
-    ground: { size: 40, color: 0x3a3f4b },
+    ground: { size: 46, color: 0x3a3f4b },
     sky: 0x9fc4e8,
-    // obstacles: axis-aligned boxes {pos:[x,z], size:[w,d], height, color}
+    // buildings line both sides of an open avenue (clear for |x| < 6)
     obstacles: [
-      { pos: [-8, -8], size: [5, 5], height: 7, color: 0x8a8f99 },
-      { pos: [8, -8], size: [5, 5], height: 9, color: 0x9aa0ab },
-      { pos: [-8, 8], size: [5, 5], height: 6, color: 0x7d828d },
-      { pos: [8, 8], size: [5, 5], height: 8, color: 0x8a8f99 },
-      { pos: [0, 14], size: [3, 3], height: 5, color: 0x9aa0ab },
+      { pos: [-10, -8], size: [6, 6], height: 9, color: 0x8a8f99 },
+      { pos: [10, -8], size: [6, 6], height: 7, color: 0x9aa0ab },
+      { pos: [-10, 2], size: [6, 6], height: 12, color: 0x7d828d },
+      { pos: [10, 2], size: [6, 6], height: 8, color: 0x8a8f99 },
+      { pos: [-10, 12], size: [6, 6], height: 7, color: 0x9aa0ab },
+      { pos: [10, 12], size: [6, 6], height: 10, color: 0x7d828d },
     ],
-    door: { pos: [0, -4], yaw: 0, color: 0xd98c3b },
+    door: { pos: [0, 16], yaw: 0, color: 0xd98c3b },
+    spawn: [
+      { pos: [-2, 0, -16], yaw: Math.PI },
+      { pos: [2, 0, -16], yaw: Math.PI },
+    ],
   },
   forest: {
     label: "Forest Path",
     prompt: "two people walking side by side, forest path, dappled light",
-    ground: { size: 40, color: 0x2f4a2f },
+    ground: { size: 46, color: 0x2f4a2f },
     sky: 0xbfe0c8,
+    // trees scattered to the sides; central path stays clear
     obstacles: [
-      { pos: [-6, -6], size: [1.6, 1.6], height: 6, color: 0x5a3d26 },
-      { pos: [6, -9], size: [1.6, 1.6], height: 7, color: 0x5a3d26 },
-      { pos: [-10, 4], size: [1.6, 1.6], height: 8, color: 0x4a3420 },
-      { pos: [9, 7], size: [1.6, 1.6], height: 6, color: 0x5a3d26 },
-      { pos: [2, 11], size: [1.6, 1.6], height: 7, color: 0x4a3420 },
-      { pos: [-3, -12], size: [1.6, 1.6], height: 6, color: 0x5a3d26 },
+      { pos: [-7, -6], size: [1.8, 1.8], height: 7, color: 0x5a3d26 },
+      { pos: [7, -9], size: [1.8, 1.8], height: 8, color: 0x5a3d26 },
+      { pos: [-10, 3], size: [1.8, 1.8], height: 9, color: 0x4a3420 },
+      { pos: [10, 6], size: [1.8, 1.8], height: 7, color: 0x5a3d26 },
+      { pos: [5, 11], size: [1.8, 1.8], height: 8, color: 0x4a3420 },
+      { pos: [-6, 13], size: [1.8, 1.8], height: 7, color: 0x5a3d26 },
+      { pos: [-11, -13], size: [1.8, 1.8], height: 8, color: 0x4a3420 },
+      { pos: [11, 14], size: [1.8, 1.8], height: 9, color: 0x5a3d26 },
     ],
-    door: { pos: [0, -4], yaw: 0, color: 0xc9a24b },
+    door: { pos: [0, 16], yaw: 0, color: 0xc9a24b },
+    spawn: [
+      { pos: [-2, 0, -16], yaw: Math.PI },
+      { pos: [2, 0, -16], yaw: Math.PI },
+    ],
   },
   room: {
     label: "Indoor Room",
     prompt: "two people walking side by side, indoor room with a door",
-    ground: { size: 24, color: 0x6b5d4f },
+    ground: { size: 26, color: 0x6b5d4f },
     sky: 0x2a2a30,
-    // four perimeter walls with a gap on the -z side for the door
+    // four perimeter walls; a free-standing door panel sits inside
     obstacles: [
-      { pos: [0, -12], size: [24, 0.6], height: 5, color: 0xbfae99 }, // back wall (door sits in front)
-      { pos: [0, 12], size: [24, 0.6], height: 5, color: 0xbfae99 }, // front wall
-      { pos: [-12, 0], size: [0.6, 24], height: 5, color: 0xbfae99 }, // left wall
-      { pos: [12, 0], size: [0.6, 24], height: 5, color: 0xbfae99 }, // right wall
+      { pos: [0, -13], size: [26, 0.6], height: 5, color: 0xbfae99 }, // back wall (door in front of it)
+      { pos: [0, 13], size: [26, 0.6], height: 5, color: 0xbfae99 }, // front wall
+      { pos: [-13, 0], size: [0.6, 26], height: 5, color: 0xbfae99 }, // left wall
+      { pos: [13, 0], size: [0.6, 26], height: 5, color: 0xbfae99 }, // right wall
     ],
     door: { pos: [0, -6], yaw: 0, color: 0x8a5a2b },
+    spawn: [
+      { pos: [-2, 0, 7], yaw: 0 }, // facing -z, toward the door
+      { pos: [2, 0, 7], yaw: 0 },
+    ],
   },
 };
 
 // Tunable kinematics (shared by both players so the demo stays symmetric).
 const MOVE_SPEED = 6.0; // world units / second
 const TURN_SPEED = 2.4; // radians / second
-const AGENT_RADIUS = 0.45; // for collision against obstacles
+const AGENT_RADIUS = 0.65; // for collision against obstacles (also keeps the camera from burying into a face)
 const EYE_HEIGHT = 1.6;
 const INTERACT_RANGE = 2.6; // how close you must be to toggle the door
 
@@ -89,10 +110,14 @@ export class STBoard {
     // the single shared, mutable interaction (the "money shot" consistency proof)
     this.door = { ...env.door, open: false };
 
-    // Two agents, spawned side by side facing +z (into the scene).
+    // Two agents, spawned side by side in the open, looking down the clear space.
+    const sp = env.spawn || [
+      { pos: [-2, 0, -16], yaw: Math.PI },
+      { pos: [2, 0, -16], yaw: Math.PI },
+    ];
     this.agents = [
-      { id: 0, pos: [-2, 0, 6], yaw: Math.PI, color: 0x4fd1ff, name: "Player 1" },
-      { id: 1, pos: [2, 0, 6], yaw: Math.PI, color: 0xff8f5f, name: "Player 2" },
+      { id: 0, pos: [...sp[0].pos], yaw: sp[0].yaw, color: 0x4fd1ff, name: "Player 1" },
+      { id: 1, pos: [...sp[1].pos], yaw: sp[1].yaw, color: 0xff8f5f, name: "Player 2" },
     ];
   }
 

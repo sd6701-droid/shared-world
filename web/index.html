@@ -52,13 +52,29 @@
         z-index: 6; display: flex; gap: 10px; align-items: center; font-size: 12px; }
       select { background: #1a1e27; color: var(--fg); border: 1px solid #333b49; border-radius: 8px;
         padding: 5px 8px; font-size: 12px; }
-      #prompt-line { opacity: 0.6; font-style: italic; max-width: 40ch; }
+      #prompt-line { opacity: 0.6; font-style: italic; max-width: 32ch; }
+      .wm-toggle { display: inline-flex; align-items: center; gap: 5px; cursor: pointer; }
+      #wm-url { background: #1a1e27; color: var(--fg); border: 1px solid #333b49;
+        border-radius: 8px; padding: 5px 8px; font-size: 11px; width: 170px; }
+      .wm-status { font-size: 11px; padding: 3px 8px; border-radius: 999px;
+        border: 1px solid #333b49; color: #9aa0ab; }
+      .wm-status.on { color: #9effc0; border-color: #3ddc84; }
+      .wm-status.err { color: #ffb3b3; border-color: #ff6b6b; }
+      /* neural overlays sit above the GL canvas, below the HUD */
+      .nn-overlay { position: fixed; top: 0; bottom: 0; z-index: 2; display: none;
+        object-fit: cover; pointer-events: none; }
+      #nn-0 { left: 0; width: 50%; }
+      #nn-1 { left: 50%; width: 50%; }
+      body.wm-on .nn-overlay { display: block; }
       .minimap-tag { position: fixed; top: 10px; left: 50%; transform: translateX(-50%) translateY(2px);
         z-index: 4; display: none; }
     </style>
   </head>
   <body>
     <div id="app"></div>
+    <!-- Option A: SDXL-Turbo re-skinned frames overlay each pane when enabled -->
+    <img id="nn-0" class="nn-overlay" alt="" />
+    <img id="nn-1" class="nn-overlay" alt="" />
     <div class="divider"></div>
 
     <div id="label-1" class="pane-label">◉ Player 1</div>
@@ -74,6 +90,11 @@
       <label>Environment:
         <select id="env-select"></select>
       </label>
+      <label class="wm-toggle">
+        <input type="checkbox" id="wm-enable" /> World model (SDXL-Turbo)
+      </label>
+      <input id="wm-url" type="text" value="http://localhost:8000" title="render server URL" />
+      <span id="wm-status" class="wm-status">off</span>
       <span id="prompt-line"></span>
     </div>
 
@@ -93,6 +114,6 @@
         }
       }
     </script>
-    <script type="module" src="./main.js"></script>
+    <script type="module" src="./main.js?v=4"></script>
   </body>
 </html>

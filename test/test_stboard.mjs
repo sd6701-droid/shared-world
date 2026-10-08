@@ -17,7 +17,8 @@ ok(p0[0] !== p1[0] || p0[2] !== p1[2], "agent 0 moved on forward input");
 
 // agent 1 untouched by agent 0's action (independent poses, shared world)
 const a1 = b.getAgent(1).pos;
-ok(a1[0] === 2 && a1[2] === 6, "agent 1 unchanged by agent 0 action");
+const spawn1 = ENVIRONMENTS.street.spawn[1].pos;
+ok(a1[0] === spawn1[0] && a1[2] === spawn1[2], "agent 1 unchanged by agent 0 action");
 
 // 3. determinism: same start + same action => same result
 const c = new STBoard("street");
@@ -47,19 +48,23 @@ ok(f.door.open === true, "door state is shared (one object)");
 f.getAgent(1).pos = [f.door.pos[0], 0, f.door.pos[1] - 1];
 ok(f.tryToggleDoor(1) === true && f.door.open === false, "agent 1 closes the same door");
 
-// 6. closed door blocks movement, open door lets you pass (room env)
+// 6. closed door blocks movement, open door lets you pass (room env).
+// Agent at +z side of the door, yaw 0 (faces -z), forward:+1 drives toward -z.
 const g = new STBoard("room");
 g.door.open = false;
-g.getAgent(0).pos = [g.door.pos[0], 0, g.door.pos[1] + 1.2];
-for (let i = 0; i < 300; i++) g.applyAction(0, { forward: -1 }, 1 / 60); // push toward/through closed door (-z)
-const blockedZ = g.getAgent(0).pos[2];
-ok(blockedZ >= g.door.pos[1] - 0.6, "closed door blocks passage");
+const g0 = g.getAgent(0);
+g0.pos = [g.door.pos[0], 0, g.door.pos[1] + 1.2];
+g0.yaw = 0;
+for (let i = 0; i < 300; i++) g.applyAction(0, { forward: 1 }, 1 / 60); // push toward -z
+ok(g0.pos[2] > g.door.pos[1], "closed door blocks passage (stays on near side)");
 
 const h = new STBoard("room");
 h.door.open = true;
-h.getAgent(0).pos = [h.door.pos[0], 0, h.door.pos[1] + 1.2];
-for (let i = 0; i < 300; i++) h.applyAction(0, { forward: -1 }, 1 / 60);
-ok(h.getAgent(0).pos[2] < h.door.pos[1], "open door allows passage");
+const h0 = h.getAgent(0);
+h0.pos = [h.door.pos[0], 0, h.door.pos[1] + 1.2];
+h0.yaw = 0;
+for (let i = 0; i < 300; i++) h.applyAction(0, { forward: 1 }, 1 / 60);
+ok(h0.pos[2] < h.door.pos[1] - 1, "open door allows passage (crosses to far side)");
 
 // 7. environments load and differ
 ok(Object.keys(ENVIRONMENTS).length === 3, "three environments");

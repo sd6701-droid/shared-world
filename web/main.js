@@ -5,7 +5,7 @@
 // it; it never invents world content. See CLAUDE.md §2, §4.
 
 import * as THREE from "three";
-import { STBoard, ENVIRONMENTS, CONSTANTS } from "./stboard.js";
+import { STBoard, ENVIRONMENTS, CONSTANTS } from "./stboard.js?v=4";
 
 // ---------------------------------------------------------------------------
 // State
@@ -18,6 +18,12 @@ renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 document.getElementById("app").appendChild(renderer.domElement);
 
+// Offscreen square renderer: grabs a crude per-agent frame to send to the
+// Option A service. preserveDrawingBuffer lets us read it out via toDataURL.
+const capRenderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+capRenderer.setSize(512, 512);
+capRenderer.shadowMap.enabled = true;
+
 // One scene, rebuilt when the environment changes. Agent avatars + door are
 // kept as handles so we can sync them to the STBoard every frame.
 let scene, cam0, cam1, minimapCam;
@@ -26,8 +32,88 @@ let doorPivot = null;
 const envObjects = []; // obstacles/ground/lights to dispose on env swap
 
 function makeCamera() {
-  const c = new THREE.PerspectiveCamera(70, 1, 0.1, 500);
+  const c = new THREE.PerspectiveCamera(78, 1, 0.1, 500);
   return c;
+}
+
+// ---------------------------------------------------------------------------
+// Procedural textures. Option C boxes were flat solid colors, so a close-up
+// face looked like a featureless gray blur. These give every surface real
+// detail (windows / bark / plaster) drawn on an offscreen canvas — no assets,
+// no network. They tile, so the detail scale stays constant across box sizes.
+// ---------------------------------------------------------------------------
+const hex2css = (h) => "#" + (h >>> 0).toString(16).padStart(6, "0");
+
+function makeCanvasTexture(draw, size = 128) {
+  const c = document.createElement("canvas");
+  c.width = c.height = size;
+  draw(c.getContext("2d"), size);
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.anisotropy = 4;
+  return t;
+}
+
+function facadeTexture(baseHex) {
+  // building wall: a grid of windows, some lit, on a concrete base
+  return makeCanvasTexture((ctx, S) => {
+    ctx.fillStyle = hex2css(baseHex);
+    ctx.fillRect(0, 0, S, S);
+    const cols = 4, rows = 4, pad = S * 0.07;
+    const cw = S / cols, ch = S / rows;
+    for (let r = 0; r < rows; r++) {
+      for (let cI = 0; cI < cols; cI++) {
+        const x = cI * cw + pad, y = r * ch + pad, w = cw - pad * 2, h = ch - pad * 2;
+        const lit = Math.random();
+        ctx.fillStyle = lit > 0.62 ? "#ffe6a3" : lit > 0.3 ? "#2a2f3a" : "#9fb6cc";
+        ctx.fillRect(x, y, w, h);
+        ctx.strokeStyle = "rgba(0,0,0,0.35)";
+        ctx.lineWidth = 1;
+        ctx.strokeRect(x, y, w, h);
+      }
+    }
+  });
+}
+
+function barkTexture(baseHex) {
+  // tree trunk: vertical bark streaks + speckle
+  return makeCanvasTexture((ctx, S) => {
+    ctx.fillStyle = hex2css(baseHex);
+    ctx.fillRect(0, 0, S, S);
+    for (let i = 0; i < 44; i++) {
+      const x = Math.random() * S;
+      ctx.strokeStyle = `rgba(0,0,0,${0.08 + Math.random() * 0.18})`;
+      ctx.lineWidth = 1 + Math.random() * 2;
+      ctx.beginPath();
+      ctx.moveTo(x, 0);
+      ctx.bezierCurveTo(x + 4, S / 3, x - 4, (2 * S) / 3, x, S);
+      ctx.stroke();
+    }
+    for (let i = 0; i < 40; i++) {
+      ctx.fillStyle = `rgba(255,240,220,${Math.random() * 0.07})`;
+      ctx.fillRect(Math.random() * S, Math.random() * S, 2, 5);
+    }
+  });
+}
+
+function wallTexture(baseHex) {
+  // interior wall: subtle plaster mottle so it isn't a flat panel
+  return makeCanvasTexture((ctx, S) => {
+    ctx.fillStyle = hex2css(baseHex);
+    ctx.fillRect(0, 0, S, S);
+    for (let i = 0; i < 700; i++) {
+      const d = Math.random() * 0.06;
+      ctx.fillStyle = Math.random() > 0.5 ? `rgba(0,0,0,${d})` : `rgba(255,255,255,${d})`;
+      ctx.fillRect(Math.random() * S, Math.random() * S, 2, 2);
+    }
+  });
+}
+
+function obstacleTexture(envName, baseHex) {
+  if (envName === "street") return facadeTexture(baseHex);
+  if (envName === "forest") return barkTexture(baseHex);
+  return wallTexture(baseHex);
 }
 
 function buildScene() {
@@ -61,9 +147,19 @@ function buildScene() {
   sun.shadow.camera.far = 80;
   scene.add(sun);
 
-  // ground
+  // ground (subtle noise so it doesn't read as a flat slab up close)
   const groundGeo = new THREE.PlaneGeometry(board.ground.size, board.ground.size);
-  const groundMat = new THREE.MeshStandardMaterial({ color: board.ground.color, roughness: 0.95 });
+  const groundTex = makeCanvasTexture((ctx, S) => {
+    ctx.fillStyle = hex2css(board.ground.color);
+    ctx.fillRect(0, 0, S, S);
+    for (let i = 0; i < 1400; i++) {
+      const d = Math.random() * 0.05;
+      ctx.fillStyle = Math.random() > 0.5 ? `rgba(0,0,0,${d})` : `rgba(255,255,255,${d})`;
+      ctx.fillRect(Math.random() * S, Math.random() * S, 2, 2);
+    }
+  });
+  groundTex.repeat.set(board.ground.size / 2, board.ground.size / 2);
+  const groundMat = new THREE.MeshStandardMaterial({ map: groundTex, roughness: 0.95 });
   const ground = new THREE.Mesh(groundGeo, groundMat);
   ground.rotation.x = -Math.PI / 2;
   ground.receiveShadow = true;
@@ -76,14 +172,22 @@ function buildScene() {
   grid.position.y = 0.01;
   scene.add(grid);
 
-  // obstacles
+  // obstacles — textured + edge-outlined so a close-up face is a surface, not blur
   for (const o of board.obstacles) {
     const geo = new THREE.BoxGeometry(o.size[0], o.height, o.size[1]);
-    const mat = new THREE.MeshStandardMaterial({ color: o.color, roughness: 0.8 });
+    const tex = obstacleTexture(board.envName, o.color);
+    // tile ~every 3 units so window/bark scale stays constant across box sizes
+    tex.repeat.set(Math.max(1, Math.round(o.size[0] / 3)), Math.max(1, Math.round(o.height / 3)));
+    const mat = new THREE.MeshStandardMaterial({ map: tex, color: 0xffffff, roughness: 0.85 });
     const box = new THREE.Mesh(geo, mat);
     box.position.set(o.pos[0], o.height / 2, o.pos[1]);
     box.castShadow = true;
     box.receiveShadow = true;
+    const edges = new THREE.LineSegments(
+      new THREE.EdgesGeometry(geo),
+      new THREE.LineBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.22 })
+    );
+    box.add(edges);
     scene.add(box);
   }
 
@@ -98,6 +202,12 @@ function buildScene() {
   const doorMesh = new THREE.Mesh(doorGeo, doorMat);
   doorMesh.position.set(doorW / 2, doorH / 2, 0);
   doorMesh.castShadow = true;
+  doorMesh.add(
+    new THREE.LineSegments(
+      new THREE.EdgesGeometry(doorGeo),
+      new THREE.LineBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.3 })
+    )
+  );
   doorPivot.add(doorMesh);
   // a bright frame so the doorway reads even when the door is open
   const frameMat = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0x222222, roughness: 0.4 });
@@ -136,6 +246,17 @@ function buildScene() {
   minimapCam.position.set(0, 60, 0);
   minimapCam.up.set(0, 0, -1);
   minimapCam.lookAt(0, 0, 0);
+
+  // First-person fix: a camera must NOT render its OWN avatar, or the player
+  // stares at the inside of their own head / nose cone. The OTHER player's
+  // camera and the minimap still see it. Layers: 0 = world (all cams), 1 =
+  // avatar 0, 2 = avatar 1.
+  avatars[0].group.traverse((o) => o.layers.set(1));
+  avatars[1].group.traverse((o) => o.layers.set(2));
+  cam0.layers.enable(2); // P1 sees world + P2's avatar, not its own (layer 1)
+  cam1.layers.enable(1); // P2 sees world + P1's avatar, not its own (layer 2)
+  minimapCam.layers.enable(1);
+  minimapCam.layers.enable(2); // minimap sees both
 }
 
 // Push STBoard state into the three.js meshes (cheap; runs every frame).
@@ -195,6 +316,64 @@ function actionFor(agentId) {
 }
 
 // ---------------------------------------------------------------------------
+// Option A — world-model re-skin (SDXL-Turbo service). The classical render
+// stays underneath as the always-works fallback; when enabled we capture each
+// agent's crude frame, send it to be re-skinned, and overlay the result. Both
+// frames come from the ONE STBoard, so both re-skins stay structurally matched.
+// ---------------------------------------------------------------------------
+const WM = {
+  enabled: false,
+  url: "http://localhost:8000",
+  inFlight: [false, false],
+  overlays: [document.getElementById("nn-0"), document.getElementById("nn-1")],
+};
+
+function captureAgentFrame(agentId) {
+  const cam = agentId === 0 ? cam0 : cam1;
+  const prevAspect = cam.aspect;
+  cam.aspect = 1; // square capture matches SDXL-Turbo's preferred input
+  cam.updateProjectionMatrix();
+  capRenderer.render(scene, cam);
+  cam.aspect = prevAspect;
+  cam.updateProjectionMatrix();
+  return capRenderer.domElement.toDataURL("image/jpeg", 0.85);
+}
+
+function setWmStatus(cls, text) {
+  const el = document.getElementById("wm-status");
+  el.className = "wm-status " + cls;
+  el.textContent = text;
+}
+
+async function reskinAgent(agentId) {
+  if (WM.inFlight[agentId]) return; // self-throttle to the server's speed
+  WM.inFlight[agentId] = true;
+  try {
+    const dataUrl = captureAgentFrame(agentId);
+    const pose = board.cameraPose(agentId);
+    const res = await fetch(WM.url.replace(/\/$/, "") + "/render", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        scene_id: board.envName,
+        agent_id: agentId,
+        pose: { pos: board.getAgent(agentId).pos, yaw: pose.yaw },
+        prompt: board.prompt,
+        image_b64: dataUrl.split(",")[1],
+      }),
+    });
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    const j = await res.json();
+    WM.overlays[agentId].src = "data:image/jpeg;base64," + j.frame_png_b64;
+    if (agentId === 0) setWmStatus("on", "on · live");
+  } catch (e) {
+    setWmStatus("err", "error: " + e.message);
+  } finally {
+    WM.inFlight[agentId] = false;
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Render loop with split-screen scissor + minimap
 // ---------------------------------------------------------------------------
 function renderViewport(cam, x, y, w, h) {
@@ -230,6 +409,13 @@ function loop(now) {
   renderViewport(minimapCam, mmX, mmY, mm, mm);
 
   renderer.setScissorTest(false);
+
+  // Option A: kick off re-skins (non-blocking; each skips if one is in flight)
+  if (WM.enabled) {
+    reskinAgent(0);
+    reskinAgent(1);
+  }
+
   updateHUD();
   requestAnimationFrame(loop);
 }
@@ -274,6 +460,31 @@ envSel.addEventListener("change", () => {
   board.setEnvironment(envSel.value);
   buildScene();
   document.getElementById("prompt-line").textContent = board.prompt;
+});
+
+// world-model toggle + server URL
+const wmEnable = document.getElementById("wm-enable");
+const wmUrl = document.getElementById("wm-url");
+wmUrl.value = WM.url;
+wmUrl.addEventListener("change", () => {
+  WM.url = wmUrl.value.trim() || WM.url;
+});
+wmEnable.addEventListener("change", async () => {
+  WM.enabled = wmEnable.checked;
+  WM.url = wmUrl.value.trim() || WM.url;
+  document.body.classList.toggle("wm-on", WM.enabled);
+  if (!WM.enabled) {
+    setWmStatus("", "off");
+    return;
+  }
+  setWmStatus("", "connecting…");
+  try {
+    const h = await fetch(WM.url.replace(/\/$/, "") + "/health");
+    const j = await h.json();
+    setWmStatus("on", "on · backend: " + (j.backend || "?"));
+  } catch (e) {
+    setWmStatus("err", "server unreachable");
+  }
 });
 
 // boot

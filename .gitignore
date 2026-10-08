@@ -17,3 +17,8 @@ __pycache__/
 # demo captures (keep out of git; link in demo/pitch.md)
 demo/*.mov
 demo/*.mp4
+
+# model weights / caches
+render_server/.venv/
+render_server/models/
+hf/
