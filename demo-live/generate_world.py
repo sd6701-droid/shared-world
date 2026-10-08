@@ -134,8 +134,21 @@ async def run(seed_path: Path, lens: str, tag: str | None = None):
                 return msg
 
     start_wall = time.time()
-    print("connecting…")
-    await r.connect()
+    # LingBot capacity is shared; a busy pool answers 429 "no available capacity".
+    for attempt in range(1, 25):
+        try:
+            print("connecting…" if attempt == 1 else f"connecting… (try {attempt}/24)")
+            await r.connect()
+            break
+        except Exception as e:
+            busy = re.search(r"capacity|busy|429|rate.?limit", str(e), re.I)
+            if not busy or attempt == 24:
+                raise
+            print("   LingBot servers are all busy — retrying in 5s")
+            await asyncio.sleep(5)
+            r = Reactor(MODEL, api_key=key)
+            r.on_message(_on_msg)
+            r.track("main_video").on_frame(_on_frame)
     print("status:", r.status)
     try:
         ref = await r.upload_file(str(seed_path))
