@@ -1,0 +1,70 @@
+:root {
+  --bg: #0e1320; --panel: #1d2536; --line: #2b3550;
+  --text: #d7deea; --muted: #7f8aa3;
+  --goggles: #3ddc84; --cameras: #b8bec9; --guard: #f5c518; --alarm: #ff4d4f; --gold: #e0b44c;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text); font-family: "Helvetica Neue", Helvetica, Arial, sans-serif; }
+main { max-width: 920px; margin: 0 auto; padding: 16px; }
+header { display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; }
+h1 { margin: 0; font-size: 22px; letter-spacing: 2px; }
+.sub { color: var(--muted); font-size: 13px; letter-spacing: 1px; margin-top: 2px; }
+.right { text-align: right; }
+.clock { font-family: Menlo, Consolas, monospace; font-size: 32px; font-weight: 700; line-height: 1; }
+.score { font-size: 14px; font-weight: 700; margin-top: 4px; }
+.score small { font-weight: 500; color: var(--muted); }
+.score .sep { color: var(--muted); margin: 0 8px; }
+.banners { min-height: 34px; margin: 10px 0; display: flex; flex-direction: column; gap: 4px; }
+.banner { padding: 5px 10px; border-radius: 4px; font-size: 13px; font-weight: 600; border: 1px solid; background: rgba(255,255,255,0.04); }
+canvas.floor { display: block; width: 100%; height: auto; border: 1px solid var(--line); border-radius: 4px; }
+.error { color: var(--alarm); font-size: 14px; }
+table { font-size: 13px; color: var(--muted); border-collapse: collapse; margin-top: 12px; }
+td { padding: 3px 14px 3px 0; vertical-align: top; }
+td:first-child { font-weight: 600; white-space: nowrap; }
+kbd { background: var(--panel); color: var(--text); padding: 1px 6px; border-radius: 3px; font-family: Menlo, Consolas, monospace; font-size: 12px; }
+a { color: var(--gold); }
+.g { color: var(--goggles); } .c { color: var(--cameras); }
+
+/* role picker */
+.roles { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin: 20px 0; }
+.roles a { display: block; padding: 18px; border: 1px solid var(--line); border-radius: 6px; text-decoration: none; color: var(--text); background: var(--panel); }
+.roles a b { display: block; font-size: 18px; margin-bottom: 4px; }
+.roles a span { color: var(--muted); font-size: 13px; }
+
+/* a player's view: the corridor canvas or the room view (where the world model goes) */
+.view > * { position: absolute; inset: 0; }
+.room { background: #000; }
+.room img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.room .card { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 24px; color: var(--text); font-size: 13px; }
+.room .card b { font-size: 24px; letter-spacing: 3px; }
+.room .card p { color: var(--muted); max-width: 640px; }
+.room .overlay { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 22px; letter-spacing: 4px; font-weight: 700; background: rgba(9,12,20,0.85); transition: opacity 0.4s; }
+.room .overlay.hidden { opacity: 0; pointer-events: none; }
+.room .tag { position: absolute; left: 12px; bottom: 12px; font-size: 10px; letter-spacing: 2px; color: var(--muted); background: rgba(9,12,20,0.6); padding: 4px 8px; border-radius: 3px; }
+.corridor { display: flex; align-items: center; justify-content: center; background: var(--bg); }
+.corridor canvas { max-width: 100%; max-height: 100%; }
+
+/* play screen: one player, full window */
+.play { position: fixed; inset: 0; overflow: hidden; }
+.play .view { position: absolute; inset: 0; }
+.play .corridor canvas { max-width: 92vw; max-height: 92vh; }
+.play .hud { position: absolute; top: 12px; left: 12px; right: 12px; display: flex; justify-content: space-between; align-items: flex-start; pointer-events: none; }
+.play .hud .who { font-weight: 700; letter-spacing: 2px; font-size: 14px; }
+.play .hud .clock { font-size: 26px; }
+.play .banners { position: absolute; top: 48px; left: 12px; right: 12px; pointer-events: none; }
+.play .minimap { position: absolute; left: 12px; bottom: 12px; width: 200px; border: 1px solid var(--line); border-radius: 4px; background: var(--bg); }
+.play .waiting { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; text-align: center; color: var(--muted); background: var(--bg); }
+.play .over { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; background: rgba(9,12,20,0.8); font-size: 36px; font-weight: 700; }
+.play .over small { font-size: 16px; font-weight: 500; color: var(--text); margin-top: 8px; }
+/* stage: map on top, both players' views below */
+.stage main { max-width: 1400px; }
+.stage canvas.floor { width: auto; max-width: 100%; max-height: 44vh; margin: 0 auto; }
+.views { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px; }
+.panel-head { display: flex; align-items: center; gap: 10px; font-size: 12px; letter-spacing: 1px; color: var(--muted); margin-bottom: 6px; }
+.panel-head b { font-size: 13px; letter-spacing: 2px; }
+.panel-head span { flex: 1; }
+.panel .view { position: relative; aspect-ratio: 16 / 9; background: #000; border: 1px solid var(--line); border-radius: 4px; overflow: hidden; }
+@media (max-width: 760px) { .views { grid-template-columns: 1fr; } }
+
+.lens-goggles .room img { filter: grayscale(1) sepia(1) hue-rotate(60deg) saturate(3) brightness(0.9) contrast(1.1); }
+.lens-cameras .room img { filter: grayscale(1) contrast(1.2) brightness(0.85); }

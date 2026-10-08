@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>The Two Thieves — stage</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="../styles.css">
+</head>
+<body class="stage">
+<main>
+  <header>
+    <div>
+      <h1>THE TWO THIEVES</h1>
+      <div class="sub">ONE SCREEN · MAP ABOVE, BOTH PLAYERS' VIEWS BELOW</div>
+    </div>
+    <div class="right">
+      <div class="clock" id="clock">00:00</div>
+      <div class="score" id="score"></div>
+    </div>
+  </header>
+  <div class="banners" id="banners"></div>
+  <canvas class="floor" id="floor"></canvas>
+  <div class="views">
+    <section class="panel lens-goggles">
+      <div class="panel-head"><b class="g">GOGGLES</b><span id="info-goggles"></span><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></div>
+      <div class="view">
+        <div class="corridor"><canvas id="corridor-goggles"></canvas></div>
+        <div class="room" id="room-goggles" hidden></div>
+      </div>
+    </section>
+    <section class="panel lens-cameras">
+      <div class="panel-head"><b class="c">CAMERAS</b><span id="info-cameras"></span><kbd>↑</kbd><kbd>←</kbd><kbd>↓</kbd><kbd>→</kbd></div>
+      <div class="view">
+        <div class="corridor"><canvas id="corridor-cameras"></canvas></div>
+        <div class="room" id="room-cameras" hidden></div>
+      </div>
+    </section>
+  </div>
+  <p class="error" id="error"></p>
+  <p class="sub">Walk onto an object to grab it, reach an exit to bank it. Stay out of the guard's cone. <kbd>R</kbd> restarts.</p>
+</main>
+<script type="module" src="stage.js"></script>
+</body>
+</html>

@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>The Two Thieves — play</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="../styles.css">
+</head>
+<body class="play">
+  <div class="view">
+    <div class="corridor" id="corridor"><canvas id="corridorCanvas"></canvas></div>
+    <div class="room" id="room" hidden></div>
+  </div>
+  <div class="hud">
+    <div class="who" id="who"></div>
+    <div class="right"><div class="clock" id="clock">00:00</div><div class="score" id="score"></div></div>
+  </div>
+  <div class="banners" id="banners"></div>
+  <canvas class="minimap" id="minimap"></canvas>
+  <div class="waiting" id="waiting">
+    <div>Waiting for the game host…<br><small>Open <a href="../map/" target="_blank">the map screen</a> in another tab of this browser and keep it open.</small></div>
+  </div>
+  <div class="over" id="over" hidden></div>
+  <script type="module" src="play.js"></script>
+</body>
+</html>

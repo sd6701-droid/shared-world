@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>The Two Thieves</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<main>
+  <header>
+    <div>
+      <h1>THE TWO THIEVES</h1>
+      <div class="sub">PICK A SCREEN</div>
+    </div>
+  </header>
+  <div class="roles">
+    <a href="stage/"><b>Stage</b><span>Everything on one screen: the map on top, Goggles' and Cameras' views below. Runs the game, takes both keyboards.</span></a>
+    <a href="map/"><b>Map</b><span>The audience screen on its own. It also runs the game, so open it first and keep it open. Both keyboards work here too.</span></a>
+    <a href="play/?role=goggles"><b class="g">Goggles</b><span>Player 1. Night-vision lens. WASD or arrows.</span></a>
+    <a href="play/?role=cameras"><b class="c">Cameras</b><span>Player 2. CCTV lens, sees the guard. WASD or arrows.</span></a>
+  </div>
+  <p class="sub">All tabs must be in the same browser profile: they talk over a BroadcastChannel until the Socket.IO server exists.</p>
+</main>
+</body>
+</html>

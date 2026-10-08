@@ -1,0 +1,11 @@
+{
+  "name": "two-thieves",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "The Two Thieves: a two-player museum heist on one shared floor, with world-model room views.",
+  "scripts": {
+    "dev": "python3 -m http.server 8777",
+    "test": "node --test \"server/__tests__/*.test.mjs\""
+  }
+}

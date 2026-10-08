@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>The Two Thieves — map</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+<main>
+  <header>
+    <div>
+      <h1>THE TWO THIEVES</h1>
+      <div class="sub">AUDIENCE MAP · THIS TAB RUNS THE GAME</div>
+    </div>
+    <div class="right">
+      <div class="clock" id="clock">00:00</div>
+      <div class="score" id="score"></div>
+    </div>
+  </header>
+  <div class="banners" id="banners"></div>
+  <canvas class="floor" id="floor"></canvas>
+  <p class="error" id="error"></p>
+  <table>
+    <tr><td class="g">Goggles</td><td><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> here, or open <a href="../play/?role=goggles">their own screen</a></td></tr>
+    <tr><td class="c">Cameras</td><td><kbd>↑</kbd><kbd>←</kbd><kbd>↓</kbd><kbd>→</kbd> here, or open <a href="../play/?role=cameras">their own screen</a></td></tr>
+    <tr><td>Goal</td><td>Three objects sit in three rooms. Walk onto one to grab it (you can carry several), then reach either exit to bank it. When all three are banked, the higher score wins.</td></tr>
+    <tr><td>Guard</td><td>Step into its vision cone and you're sent back to start with a 30 s penalty, and anything you carry goes back to its room.</td></tr>
+    <tr><td>Restart</td><td><kbd>R</kbd></td></tr>
+  </table>
+</main>
+<script type="module" src="map.js"></script>
+</body>
+</html>
