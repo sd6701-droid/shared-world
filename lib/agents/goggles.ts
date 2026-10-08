@@ -3,7 +3,7 @@ import type { AgentConfig } from './types';
 // Goggles — thief. Night-vision lens. Minimap shows only its own dot (§8).
 export const goggles: AgentConfig = {
   id: 'goggles',
-  label: 'Goggles',
+  label: 'Thief 1',
   color: '#3ddc84', // green
   rendered: true,
   mobile: true,

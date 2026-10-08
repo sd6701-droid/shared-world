@@ -8,11 +8,10 @@ import { ROLES, LABEL, EVENTS } from '../../shared/types.js';
 import { LocalHost } from '../../server/local.js';
 import { viewFor } from '../../server/rules.js';
 import { drawFloor, COLOR, FONT } from '../../lib/floorCanvas.js';
-import { createRoomSession } from '../play/roomSession.js';
+import { createRoomSession, CORRIDOR } from '../play/roomSession.js';
 import { LENSES } from '../play/lenses.js';
 
 const MAP_CELL = 44;
-const VIEW_CELL = 32;
 const KEYS = {
   goggles: { w: 'N', a: 'W', s: 'S', d: 'E' },
   cameras: { ArrowUp: 'N', ArrowLeft: 'W', ArrowDown: 'S', ArrowRight: 'E' },
@@ -34,15 +33,12 @@ floor.height = map.height * MAP_CELL;
 
 const panels = {};
 for (const role of ROLES) {
-  const corridor = document.getElementById('corridor-' + role);
-  corridor.width = map.width * VIEW_CELL;
-  corridor.height = map.height * VIEW_CELL;
   panels[role] = {
-    corridor,
-    corridorCtx: corridor.getContext('2d'),
-    corridorBox: corridor.parentElement,
     info: document.getElementById('info-' + role),
-    session: createRoomSession({ root: document.getElementById('room-' + role), map, role, lens: LENSES[role] }),
+    session: createRoomSession({
+      root: document.getElementById('room-' + role), map, role, lens: LENSES[role],
+      onLoading: (loading) => host.setLoading(role, loading),
+    }),
   };
 }
 
@@ -54,27 +50,28 @@ host.onEvent((ev) => {
 });
 host.start();
 
-// keyboard: both roles; the host rate-limits moves, the room session gets the same key
+// keyboard: both roles. A press moves the thief one cell on the map (the host
+// rate-limits repeats); the room view gets the set of held directions, which
+// drives the live camera until the key is released.
 const held = new Set();
 const normKey = (e) => (e.key.length === 1 ? e.key.toLowerCase() : e.key);
-function press(role, dir) {
-  host.input(role, dir);
-  panels[role].session.input(dir);
-}
+const heldDirs = (role) => Object.entries(KEYS[role]).filter(([k]) => held.has(k)).map(([, dir]) => dir);
+const syncHeld = () => { for (const role of ROLES) panels[role].session.hold(heldDirs(role)); };
 window.addEventListener('keydown', (e) => {
   const k = normKey(e);
   if (k.startsWith('Arrow') || k === ' ') e.preventDefault();
   if (e.repeat) return;
   if (k === 'r') { host.restart(); return; }
   held.add(k);
-  for (const role of ROLES) if (KEYS[role][k]) press(role, KEYS[role][k]);
+  for (const role of ROLES) if (KEYS[role][k]) host.input(role, KEYS[role][k]);
+  syncHeld();
 });
-window.addEventListener('keyup', (e) => held.delete(normKey(e)));
-window.addEventListener('blur', () => held.clear());
+window.addEventListener('keyup', (e) => { held.delete(normKey(e)); syncHeld(); });
+window.addEventListener('blur', () => { held.clear(); syncHeld(); });
 setInterval(() => {
   for (const role of ROLES) {
-    const hit = Object.entries(KEYS[role]).find(([k]) => held.has(k));
-    if (hit) press(role, hit[1]);
+    const dir = heldDirs(role)[0];
+    if (dir) host.input(role, dir);
   }
 }, 50);
 
@@ -104,16 +101,13 @@ function frame() {
     const panel = panels[role];
     const view = viewFor(state, role);
     const me = view.players[role];
-    if (me.room !== panel.session.room) {
-      if (me.room) panel.session.enter(me.room);
-      else panel.session.exit();
-    }
-    panel.corridorBox.hidden = !!me.room;
-    if (!me.room) drawFloor(panel.corridorCtx, map, view, { cell: VIEW_CELL, roles: [role] });
+    const place = me.room || CORRIDOR; // every place has an image, the corridor included
+    if (place !== panel.session.room) { panel.session.enter(place); panel.session.hold(heldDirs(role)); }
 
     const info = (me.room ? map.rooms[me.room].label : 'Corridor') +
       (me.carrying.length ? ' · carrying ' + me.carrying.map((id) => map.lootById[id].label.toLowerCase()).join(', ') : '') +
-      (state.clock < me.penaltyUntil ? ' · <span style="color:' + COLOR.alarm + '">penalty ' + Math.ceil(me.penaltyUntil - state.clock) + ' s</span>' : '');
+      (state.clock < me.penaltyUntil ? ' · <span style="color:' + COLOR.alarm + '">penalty ' + Math.ceil(me.penaltyUntil - state.clock) + ' s</span>' : '') +
+      (me.loading ? ' · loading, safe from guard' : '');
     if (info !== lastInfo[role]) { panel.info.innerHTML = info; lastInfo[role] = info; }
   }
 

@@ -8,7 +8,7 @@
 // real server filters per recipient before sending.
 
 import { EVENTS, MESSAGES } from '../shared/types.js';
-import { newGame, tick, move, introEvents } from './rules.js';
+import { newGame, tick, move, setLoading, introEvents } from './rules.js';
 
 export class LocalHost {
   constructor(map, { channel = 'two-thieves', hz = 10 } = {}) {
@@ -40,12 +40,18 @@ export class LocalHost {
   /** Message from a client tab. */
   receive(msg) {
     if (msg.type === MESSAGES.MOVE) this.input(msg.role, msg.dir);
+    else if (msg.type === MESSAGES.LOADING) this.setLoading(msg.role, msg.loading);
     else if (msg.type === MESSAGES.RESTART) this.restart();
   }
 
   /** Direct input (the host page's own keyboard). */
   input(role, dir) {
     this.emit(move(this.state, this.map, role, dir));
+  }
+
+  /** Direct loading report (the host page's own room views). */
+  setLoading(role, loading) {
+    this.emit(setLoading(this.state, role, loading));
   }
 
   restart() {

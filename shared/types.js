@@ -2,7 +2,7 @@
 // Change this file out loud: announce it to the team before pushing.
 
 export const ROLES = ['goggles', 'cameras'];
-export const LABEL = { goggles: 'Goggles', cameras: 'Cameras' };
+export const LABEL = { goggles: 'Thief 1', cameras: 'Thief 2' };
 
 // host -> clients
 export const EVENTS = {
@@ -16,6 +16,7 @@ export const EVENTS = {
 // clients -> host
 export const MESSAGES = {
   MOVE: 'move',       // { type, role, dir: 'N' | 'E' | 'S' | 'W' }
+  LOADING: 'loading', // { type, role, loading: boolean }  the player's view is loading: guard can't catch them
   RESTART: 'restart', // { type }
 };
 
@@ -30,6 +31,8 @@ export const MESSAGES = {
  * @property {string[]} carrying       loot ids
  * @property {number} score            loot banked at an exit
  * @property {number} lastMove         clock of the last accepted move
+ * @property {boolean} loading         the player's view is loading (guard can't catch them)
+ * @property {number} loadingSince     clock when `loading` last changed
  *
  * @typedef {Object} GameState
  * @property {'playing' | 'over'} phase

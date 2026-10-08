@@ -7,7 +7,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { indexMap, same } from '../../shared/map.js';
-import { newGame, tick, move, viewFor, coneOf, MOVE_COOLDOWN, PENALTY } from '../rules.js';
+import { newGame, tick, move, viewFor, coneOf, setLoading, MOVE_COOLDOWN, PENALTY, GUARD_STEP, MAX_LOADING } from '../rules.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const map = indexMap(JSON.parse(fs.readFileSync(path.join(root, 'map.json'), 'utf8')));
@@ -18,7 +18,7 @@ test('guard: a full lap returns to the start, every step adjacent, cone never em
   const s = newGame(map);
   let prev = s.guard.cell;
   for (let i = 0; i < map.guardRoute.length; i++) {
-    tick(s, map, 1);
+    tick(s, map, GUARD_STEP);
     const c = s.guard.cell;
     assert.equal(Math.abs(prev[0] - c[0]) + Math.abs(prev[1] - c[1]), 1);
     assert.ok(coneOf(s, map).length >= 1);
@@ -82,15 +82,9 @@ test('catch: back to start, penalty, frozen, loot returns to its room', () => {
   s.players.goggles.room = null;
   s.players.goggles.carrying = ['compass'];
   s.loot.compass = { state: 'carried', holder: 'goggles' };
-  const ev = tick(s, map, 1); // guard steps; the player is standing in the new cone? force a check instead:
-  // make sure a check happens with the player in the cone right now
-  s.players.goggles.cell = coneOf(s, map)[0];
-  s.players.goggles.penaltyUntil = 0;
-  const ev2 = tick(s, map, 1);
-  const all = [...ev, ...ev2];
+  const all = tick(s, map, 0.1); // catches are checked every tick
   assert.ok(same(s.players.goggles.cell, map.starts.goggles));
-  assert.ok(s.players.goggles.penaltyUntil > s.clock);
-  assert.ok(s.players.goggles.penaltyUntil - s.clock <= PENALTY);
+  assert.ok(Math.abs(s.players.goggles.penaltyUntil - s.clock - PENALTY) < 1e-9, 'penalty is PENALTY seconds');
   assert.deepEqual(s.players.goggles.carrying, []);
   assert.equal(s.loot.compass.state, 'placed');
   assert.ok(all.some((e) => e.name === 'roomEnter' && e.room === 'lobby'), 'teleport home re-enters the Lobby');
@@ -146,3 +140,76 @@ test('map: three objects in three different non-exit rooms, each inside its room
     assert.ok(!exitRooms.has(l.room));
   }
 });
+
+test('one thief per room: you cannot walk into a room the other thief is in', () => {
+  const s = newGame(map);
+  const door = map.doors.find((d) => d.room === 'archive');
+  s.players.cameras.cell = [12, 10];
+  s.players.cameras.room = 'archive';
+  s.players.goggles.cell = [...door.outside];
+  s.players.goggles.room = null;
+
+  const ev = move(s, map, 'goggles', 'S');
+  assert.ok(same(s.players.goggles.cell, door.outside), 'blocked at the door');
+  assert.equal(s.players.goggles.room, null);
+  assert.ok(ev.some((e) => e.name === 'banner' && e.to === 'goggles'), 'blocked thief is told why');
+
+  const again = move(s, map, 'goggles', 'S');
+  assert.equal(again.length, 0, 'no repeat banner while the key is held');
+
+  s.players.cameras.cell = [16, 7];
+  s.players.cameras.room = null; // the other thief leaves
+  tick(s, map, MOVE_COOLDOWN);
+  const enter = move(s, map, 'goggles', 'S');
+  assert.ok(same(s.players.goggles.cell, door.cell), 'free once the room is empty');
+  assert.ok(enter.some((e) => e.name === 'roomEnter' && e.room === 'archive'));
+});
+
+test('one thief per room: moving around inside your own room and the corridor is unaffected', () => {
+  const s = newGame(map);
+  s.players.goggles.cell = [2, 1];
+  s.players.cameras.cell = [3, 4];
+  s.players.cameras.room = null;
+  move(s, map, 'goggles', 'E');
+  assert.ok(same(s.players.goggles.cell, [3, 1]), 'moving within the Lobby still works');
+});
+
+test('guard: slow, one cell per GUARD_STEP seconds; penalty is 3 s', () => {
+  const s = newGame(map);
+  const start = s.guard.cell;
+  tick(s, map, GUARD_STEP - 0.1);
+  assert.ok(same(s.guard.cell, start), 'has not moved before GUARD_STEP');
+  tick(s, map, 0.1);
+  assert.ok(!same(s.guard.cell, start), 'moves at GUARD_STEP');
+  assert.equal(GUARD_STEP, 3);
+  assert.equal(PENALTY, 3);
+});
+
+test('loading: the guard cannot catch a thief whose view is loading', () => {
+  const s = newGame(map);
+  s.players.goggles.room = null;
+  setLoading(s, 'goggles', true);
+  s.players.goggles.cell = coneOf(s, map)[0];
+  const cell = s.players.goggles.cell;
+  tick(s, map, 0.1);
+  assert.ok(same(s.players.goggles.cell, cell), 'not caught while loading');
+  assert.equal(s.players.goggles.penaltyUntil, 0, 'no penalty while loading');
+
+  setLoading(s, 'goggles', false);
+  s.players.goggles.cell = coneOf(s, map)[0];
+  tick(s, map, 0.1);
+  assert.ok(same(s.players.goggles.cell, map.starts.goggles), 'caught as soon as loading ends');
+});
+
+test('loading: the shield runs out after MAX_LOADING seconds (stuck or closed tab)', () => {
+  const s = newGame(map);
+  s.players.cameras.room = null;
+  setLoading(s, 'cameras', true);
+  // park the guard somewhere fixed by never letting it step: stay inside one GUARD_STEP
+  s.clock = MAX_LOADING + 1;
+  s.guardAcc = 0;
+  s.players.cameras.cell = coneOf(s, map)[0];
+  tick(s, map, 0.1);
+  assert.ok(same(s.players.cameras.cell, map.starts.cameras), 'caught once the shield expired');
+});
+

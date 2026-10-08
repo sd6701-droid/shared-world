@@ -4,7 +4,7 @@ import type { AgentConfig } from './types';
 // last corridor cell (§7 rule 7, §8). This asymmetry is the competitive edge.
 export const cameras: AgentConfig = {
   id: 'cameras',
-  label: 'Cameras',
+  label: 'Thief 2',
   color: '#b0b0b0', // grey
   rendered: true,
   mobile: true,

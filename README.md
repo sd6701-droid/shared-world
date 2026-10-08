@@ -13,27 +13,41 @@ patrols. The game host is the only source of truth; the world model
 
 ## 1. Run it
 
-No build step, no dependencies. Everything is plain ES modules served
-statically.
+No build step, no npm install. Needs Node 18+ and, for live rooms,
+`REACTOR_API_KEY` in `.env.local`.
 
 ```bash
 cd shared-world
-python3 -m http.server 8777        # or: pnpm dev
-# open http://localhost:8777/app/
+node server/dev.mjs                # or: npm run dev
+# open http://localhost:8777/app/stage/
 ```
+
+`server/dev.mjs` serves the game and mints Reactor session tokens at
+`POST /api/token`, so the key never reaches the browser. It listens on
+localhost only and never serves dotfiles. (`python3 -m http.server` still runs
+the game, but live rooms then fall back to their still image.)
 
 | Screen | URL | What it is |
 |---|---|---|
-| **Stage** | `/app/stage/` | Everything on one screen: the map on top, Goggles' view bottom-left, Cameras' view bottom-right. Runs the game and takes both keyboards. Start here. |
-| Map | `/app/map/` | The audience floor plan. **This tab runs the game**, so open it first and keep it open. Both keyboards work here (Goggles WASD, Cameras arrows), so one laptop is enough to play. |
-| Goggles | `/app/play/?role=goggles` | Player 1's screen: corridor view, room view, own minimap. WASD or arrows. |
-| Cameras | `/app/play/?role=cameras` | Player 2's screen: same, plus the guard on the minimap. |
+| **Stage** | `/app/stage/` | Everything on one screen: the map on top, Thief 1's view bottom-left, Thief 2's view bottom-right. Runs the game and takes both keyboards. Start here. |
+| Map | `/app/map/` | The audience floor plan on its own. **This tab runs the game**, so open it first and keep it open. Both keyboards work here. |
+| Thief 1 | `/app/play/?role=goggles` | One player's screen: room view plus own minimap. |
+| Thief 2 | `/app/play/?role=cameras` | Same, plus the guard on the minimap. |
 
-The three tabs talk over a `BroadcastChannel`, so they must be in the same
-browser profile. That stands in for the Socket.IO server until it exists; each
-player will then get their own laptop.
+The map and play tabs talk over a `BroadcastChannel`, so they must be in the
+same browser profile until the Socket.IO server exists.
 
-Tests: `node --test "server/__tests__/*.test.mjs"` (or `pnpm test`). They need Node 22+.
+### Live rooms (world model)
+
+Rooms listed in `app/play/liveRooms.js` stream Lingbot-World-2 when a thief
+walks in; every other place shows its still image. Today only the **Gallery**
+is live, seeded with `demo-live/rooms50/angle_05.jpg` (the tested room from
+`./world.sh live`). Inside a live room the thief's movement keys drive the
+camera (forward/back/strafe) while still moving their dot on the map. The
+session closes when they leave, after 60 s idle, on restart and when the tab
+closes. **Sessions bill per second while open.**
+
+Tests: `node --test "server/__tests__/*.test.mjs"` (or `npm test`). They need Node 22+.
 
 ## 2. Five rules that keep everyone consistent
 
@@ -69,6 +83,7 @@ task from `tasks.md` (S = supporting lane). *(planned)* = not written yet.
 ├── server/                         the game host
 │   ├── rules.js                    ALL rules, pure functions, return events        [C]  T1
 │   ├── local.js                    in-browser host: 10 Hz tick + BroadcastChannel  [A]  T1
+│   ├── dev.mjs                     dev server: static files + /api/token (reads the key)  [D] S
 │   ├── index.ts         (planned)  the real Node + Socket.IO server (replaces local.js)  [A] T1
 │   └── __tests__/rules.test.mjs    node:test suite for every rule          [C]  T1
 │
@@ -80,9 +95,11 @@ task from `tasks.md` (S = supporting lane). *(planned)* = not written yet.
 ├── app/                            the screens (static pages now, Next.js routes later)
 │   ├── index.html                  /          screen picker                [D]  S
 │   ├── styles.css                  shared styles                           [D]  S
+│   ├── stage/index.html + stage.js /stage     map + both views on one screen, hosts the game  [A] T1
 │   ├── map/index.html + map.js     /map       audience map, hosts the game [A]  T1
 │   ├── play/index.html + play.js   /play      one player's screen          [B]  T3
-│   ├── play/roomSession.js         the world-model seam (see §8)           [B]  T3
+│   ├── play/roomSession.js         room view + live Lingbot sessions (§8)  [B]  T3
+│   ├── play/liveRooms.js           which rooms stream live, seed + scene   [B]  T3
 │   ├── play/lenses.js              the two lens prompts                    [B]  T3
 │   ├── settings/        (planned)  /settings  key form + test buttons      [D]  S
 │   └── api/token, api/settings (planned)  Reactor JWT, key storage         [D]  S
@@ -101,10 +118,20 @@ task from `tasks.md` (S = supporting lane). *(planned)* = not written yet.
 - **Exits bank** what you carry: +1 per object. Keep playing.
 - **Game over** when all three are banked; higher score wins (3 objects, so
   no draws).
-- **Guard** walks the corridor loop one cell per second with a 3-cell vision
-  cone. Caught = back to start, 30 s frozen, carried loot returns to its room.
+- **Guard** walks the corridor loop slowly, one cell every 3 s (2 min a lap),
+  with a 3-cell vision cone. Caught = back to start, 3 s frozen, carried loot
+  returns to its room.
+- **Loading shield:** while a thief's view is loading (entering a room or the
+  corridor; later, until the world-model stream shows its first frame) the
+  guard can't catch them. The screen reports it with a `loading` message;
+  the shield lasts at most 10 s so a stuck or closed tab can't hide forever.
 - Moves are one cell, rate-limited to 4/s per player, between areas only
   through doors.
+- **One thief per room:** you can't walk into a room the other thief is in;
+  you're stopped at the door and told why. (Being sent home after a catch is
+  exempt, since the other thief may be banking in your start room.)
+- **Room view:** every room shows `public/rooms/default.png` until it has its
+  own `public/rooms/<roomId>.png`.
 - **Role filtering** (`viewFor`): Goggles' state has no guard; Cameras and
   the map see everything.
 

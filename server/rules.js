@@ -6,9 +6,11 @@ import { ROLES, LABEL, EVENTS } from '../shared/types.js';
 import { DIRS, same } from '../shared/map.js';
 
 export const MOVE_COOLDOWN = 0.25; // s between accepted moves per player (4 moves/s)
-export const GUARD_STEP = 1;       // guard advances one cell per second
+export const GUARD_STEP = 3;       // s per guard step: slow, one cell every 3 s (a lap is 2 min)
 export const CONE_LEN = 3;         // cells ahead the guard can see
-export const PENALTY = 30;         // s frozen at start after a catch
+export const PENALTY = 3;          // s frozen at start after a catch
+export const MAX_LOADING = 10;     // s a loading view protects a thief; caps a stuck or closed tab
+export const ROOM_BLOCK_NOTICE = 2; // s between "room occupied" banners while a key is held
 
 const COLOR = { gold: '#e0b44c', muted: '#7f8aa3', text: '#d7deea', goggles: '#3ddc84', cameras: '#b8bec9' };
 const banner = (to, text, color, secs = 3) => ({ name: EVENTS.BANNER, to, text, color, secs });
@@ -23,7 +25,8 @@ export function newGame(map) {
   for (const role of ROLES) {
     state.players[role] = {
       cell: [...map.starts[role]], room: map.roomAt(map.starts[role]),
-      penaltyUntil: 0, carrying: [], score: 0, lastMove: -Infinity,
+      penaltyUntil: 0, carrying: [], score: 0, lastMove: -Infinity, blockedNoticeAt: -Infinity,
+      loading: false, loadingSince: 0,
     };
   }
   for (const l of map.loot) state.loot[l.id] = { state: 'placed', holder: null };
@@ -44,9 +47,27 @@ export function tick(state, map, dt) {
   while (state.guardAcc >= GUARD_STEP) {
     state.guardAcc -= GUARD_STEP;
     stepGuard(state, map);
-    checkCatches(state, map, events);
   }
+  checkCatches(state, map, events); // every tick, so a thief whose view finishes loading in the cone is caught
   return events;
+}
+
+/**
+ * The player's screen reports whether their view is loading (a room or the
+ * corridor image, later a world-model session). While it is, the guard can't
+ * catch them, for at most MAX_LOADING seconds.
+ */
+export function setLoading(state, role, loading) {
+  const p = state.players[role];
+  if (!p || p.loading === !!loading) return [];
+  p.loading = !!loading;
+  p.loadingSince = state.clock;
+  return [];
+}
+
+/** True while the guard can't catch this player because their view is loading. */
+export function isShielded(state, p) {
+  return p.loading && state.clock - p.loadingSince < MAX_LOADING;
 }
 
 /** One requested step. The host calls this for every move message; the cooldown here is the rate limit. */
@@ -57,6 +78,17 @@ export function move(state, map, role, dir) {
   if (state.clock < p.penaltyUntil || state.clock - p.lastMove < MOVE_COOLDOWN) return events;
   const next = [p.cell[0] + DIRS[dir][0], p.cell[1] + DIRS[dir][1]];
   if (!map.canStep(p.cell, next)) return events;
+
+  // one thief per room: you can't walk into a room the other thief is in
+  const target = map.roomAt(next);
+  const occupant = target && target !== p.room && ROLES.find((r) => r !== role && state.players[r].room === target);
+  if (occupant) {
+    if (state.clock - p.blockedNoticeAt >= ROOM_BLOCK_NOTICE) {
+      p.blockedNoticeAt = state.clock;
+      events.push(banner(role, LABEL[occupant] + ' is in the ' + map.rooms[target].label + '. Wait for them to leave.', COLOR.muted, 2));
+    }
+    return events;
+  }
 
   p.cell = next;
   p.lastMove = state.clock;
@@ -121,8 +153,9 @@ function checkCatches(state, map, events) {
   const seen = [state.guard.cell, ...coneOf(state, map)];
   for (const role of ROLES) {
     const p = state.players[role];
-    if (state.clock < p.penaltyUntil) continue;
+    if (state.clock < p.penaltyUntil || isShielded(state, p)) continue;
     if (!seen.some((c) => same(c, p.cell))) continue;
+    // the teleport home is exempt from one-thief-per-room: the other thief may be banking in your start room
     p.cell = [...map.starts[role]];
     p.penaltyUntil = state.clock + PENALTY;
     setRoom(p, role, map.roomAt(p.cell), events);

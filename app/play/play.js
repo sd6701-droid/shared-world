@@ -1,13 +1,13 @@
 // One player's screen: /play/?role=goggles or ?role=cameras.
-// Outside a room: a top-down corridor view. Inside a room: the room view
-// (roomSession.js), which is where the world model plugs in. The minimap
+// The view shows an image of wherever the player is (a room or the corridor)
+// through roomSession.js, which is where the world model plugs in. The minimap
 // shows what this role is allowed to see (viewFor in server/rules.js).
 
 import { loadMap } from '../../shared/map.js';
 import { ROLES, LABEL } from '../../shared/types.js';
 import { connect } from '../../lib/gameClient.js';
 import { drawFloor, COLOR } from '../../lib/floorCanvas.js';
-import { createRoomSession } from './roomSession.js';
+import { createRoomSession, CORRIDOR } from './roomSession.js';
 import { LENSES } from './lenses.js';
 
 const params = new URLSearchParams(location.search);
@@ -20,17 +20,15 @@ const KEYS = { w: 'N', a: 'W', s: 'S', d: 'E', ArrowUp: 'N', ArrowLeft: 'W', Arr
 const MINI_CELL = 10;
 const map = await loadMap('../../map.json');
 
-const corridorCanvas = document.getElementById('corridorCanvas');
-const corridorCtx = corridorCanvas.getContext('2d');
-const CORRIDOR_CELL = 40;
-corridorCanvas.width = map.width * CORRIDOR_CELL;
-corridorCanvas.height = map.height * CORRIDOR_CELL;
 const minimap = document.getElementById('minimap');
 const miniCtx = minimap.getContext('2d');
 minimap.width = map.width * MINI_CELL;
 minimap.height = map.height * MINI_CELL;
 
-const session = createRoomSession({ root: document.getElementById('room'), map, role, lens: LENSES[role] });
+const session = createRoomSession({
+  root: document.getElementById('room'), map, role, lens: LENSES[role],
+  onLoading: (loading) => client.loading(loading), // client is created below; this only fires once the game is running
+});
 
 let state = null;
 let lastStateAt = 0;
@@ -55,13 +53,15 @@ window.addEventListener('keydown', (e) => {
   if (!KEYS[k]) return;
   held.add(k);
   client.move(KEYS[k]);
-  session.input(KEYS[k]);
+  session.hold(heldDirs());
 });
-window.addEventListener('keyup', (e) => held.delete(normKey(e)));
-window.addEventListener('blur', () => held.clear());
+// the room view gets the set of held directions: it drives the live camera until release
+const heldDirs = () => [...new Set(Object.keys(KEYS).filter((k) => held.has(k)).map((k) => KEYS[k]))];
+window.addEventListener('keyup', (e) => { held.delete(normKey(e)); session.hold(heldDirs()); });
+window.addEventListener('blur', () => { held.clear(); session.hold([]); });
 setInterval(() => {
-  const hit = Object.keys(KEYS).find((k) => held.has(k));
-  if (hit) { client.move(KEYS[hit]); session.input(KEYS[hit]); }
+  const dir = heldDirs()[0];
+  if (dir) client.move(dir);
 }, 50);
 
 let lastScore = '', lastBanners = '';
@@ -71,13 +71,9 @@ function frame() {
   if (state) {
     const me = state.players[role];
 
-    // room view vs corridor view, driven by the state so a late-opened tab catches up
-    if (me.room !== session.room) {
-      if (me.room) session.enter(me.room);
-      else session.exit();
-    }
-    document.getElementById('corridor').hidden = !!me.room;
-    if (!me.room) drawFloor(corridorCtx, map, state, { cell: CORRIDOR_CELL, roles: [role] });
+    // driven by the state, so a late-opened tab catches up
+    const place = me.room || CORRIDOR;
+    if (place !== session.room) { session.enter(place); session.hold(heldDirs()); }
 
     drawFloor(miniCtx, map, state, { cell: MINI_CELL, roles: [role], showRoute: false });
 
@@ -85,7 +81,8 @@ function frame() {
     document.getElementById('clock').textContent =
       String(Math.floor(t / 60)).padStart(2, '0') + ':' + String(t % 60).padStart(2, '0');
     const score = 'Score ' + me.score + (me.carrying.length ? ' <small>+' + me.carrying.length + ' carrying</small>' : '') +
-      (state.clock < me.penaltyUntil ? ' <span style="color:' + COLOR.alarm + '">penalty ' + Math.ceil(me.penaltyUntil - state.clock) + ' s</span>' : '');
+      (state.clock < me.penaltyUntil ? ' <span style="color:' + COLOR.alarm + '">penalty ' + Math.ceil(me.penaltyUntil - state.clock) + ' s</span>' : '') +
+      (me.loading ? ' <small>loading · safe from guard</small>' : '');
     if (score !== lastScore) { document.getElementById('score').innerHTML = score; lastScore = score; }
 
     const over = document.getElementById('over');
