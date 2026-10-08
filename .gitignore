@@ -12,3 +12,7 @@ coverage/
 # OS / editor
 .DS_Store
 *.log
+
+# Python build artifacts
+__pycache__/
+*.pyc
