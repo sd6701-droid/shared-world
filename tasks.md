@@ -23,7 +23,7 @@ demo. Each task has a flowchart in [`plan/`](./plan/). The full spec is in
 | Hour 2 | D → everyone | One-command dev script |
 | Hour 3 | A → B | Running socket |
 | Hour 3 on | D → everyone | Checklist runs and honest bug reports; D stops writing features |
-| Hourly | Everyone | Branches rebased on `main` |
+| Hourly | Everyone | Branches rebased on `two-theives` |
 
 ---
 
@@ -247,7 +247,7 @@ the pitch.
 `/settings`; the checklist passes; a stranger can play a round in under
 8 minutes with you narrating.
 
-**You need:** the Reactor and Gemini keys; everyone's branches rebased on `main`
+**You need:** the Reactor and Gemini keys; everyone's branches rebased on `two-theives`
 hourly.
 
 - [ ] `/api/token` (hour 1)

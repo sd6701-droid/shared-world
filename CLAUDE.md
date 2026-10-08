@@ -135,36 +135,23 @@ file to match.
 
 ## 4. Repo layout
 
+**[`README.md`](./README.md) is the source of truth for the layout**: the full
+folder tree, who owns each file, import boundaries, room ids, event names, env
+vars and branch workflow. Read it before creating any file. In short:
+
 ```
-/                          repo root (branch two-theives)
-  CLAUDE.md                this file
-  map.json                 the floor: grid, rooms, doors, exits, guard route, compass room
-  .env.local               REACTOR_API_KEY, GEMINI_API_KEY, GEMINI_IMAGE_MODEL (git-ignored)
-  server/
-    index.ts               Socket.IO server on :3001, 10 Hz tick loop, event wiring
-    game.ts                GameState + pure rule functions (tick, move, search, grab)
-    map.ts                 loads map.json, cell lookups, room-of-cell, walkability
-    game.test.ts           rule tests (no sockets, no timers: drive tick() directly)
-  app/
-    page.tsx               /          role picker + key-status banner
-    map/page.tsx           /map       audience floor plan
-    play/page.tsx          /play      player screen (?role=goggles|cameras)
-    settings/page.tsx      /settings  key form + test buttons
-    api/token/route.ts     mint a Reactor session JWT
-    api/settings/route.ts  read/write keys
-  lib/
-    useGameState.ts        one Socket.IO connection + state subscription
-    useControls.ts         the SINGLE keyboard hook (map move + room-session move)
-    roomSession.ts         Lingbot-World-2 session lifecycle (open/close/idle timeout)
-    lenses.ts              lens prompts per role
-  public/rooms/            <room>.png × 6, <compassRoom>-compass.png × 1
-  scripts/
-    gen-rooms.ts           Nano Banana seed-image generation
+map.json, beats.json   data contract (floor, game text)
+shared/                types.ts, map.ts, fixtures.ts: the only code both sides import
+server/                index.ts (socket + tick), bot.ts, rules.ts (ALL rules, pure), __tests__/
+app/                   Next.js routes: /, /map, /play (+ _components, _hooks), /settings, api/token, api/settings
+components/            UI used by more than one page (Banner)
+lib/                   gameClient.ts (one socket), floorCanvas.ts, keys.ts (server-only)
+public/rooms/          7 seed images
+scripts/               gen-rooms.ts
 ```
 
-File names under `server/` and `lib/` are a suggested split, not a requirement.
-The requirement is that **all rules live in the server** and are unit-testable
-without sockets.
+The requirement is that **all rules live in `server/rules.ts`** and are
+unit-testable without sockets.
 
 ---
 
