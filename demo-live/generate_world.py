@@ -33,9 +33,22 @@ OUT = HERE / "out" / "world"
 MODEL = "reactor/lingbot-world-2"
 DEFAULT_SEED = ROOT / "public" / "rooms" / "closed-room" / "seed.png"
 
-SCENE = ("a closed, windowless, doorless room at night with bare dark grey walls, a dark wooden floor, "
-         "a single plain wooden table in the center with one small ceramic vase on it, "
-         "lit only by a soft cool light from the ceiling, no people")
+# One entry per world-model "agent": what the place is, and how long to walk forward.
+SCENES = {
+    "room": {
+        "prompt": ("a closed, windowless, doorless room at night with bare dark grey walls, a dark wooden floor, "
+                   "a single plain wooden table in the center with one small ceramic vase on it, "
+                   "lit only by a soft cool light from the ceiling, no people"),
+        "walk_s": 2.0,
+    },
+    "corridor": {
+        "prompt": ("a long, narrow indoor corridor with plain dark grey walls, closed dark doors set into both walls, "
+                   "a row of square light panels along the ceiling, and a dark wooden floor with small tan markers, "
+                   "no windows, no people, the doors stay closed"),
+        "walk_s": 4.0,
+    },
+}
+SCENE = SCENES["room"]["prompt"]
 LENSES = {
     "plain":   "first person, eye-level camera, photorealistic, steady, slightly soft and low-detail, no new objects",
     "goggles": "night-vision goggles view, monochrome green, bright center, dark vignette edges, slight grain, first person",
@@ -45,12 +58,16 @@ LENSES = {
 # (seconds after generation_started, command, payload, label)
 # Simple run: hold, one small step forward, hold. No turning (turning reveals
 # walls the seed never showed, which is where the model invents content).
-TIMELINE = [
-    (0.0, None, None, "idle (hold)"),
-    (3.0, "set_move_longitudinal", {"move_longitudinal": "forward"}, "walk forward"),
-    (5.0, "set_move_longitudinal", {"move_longitudinal": "idle"}, "stop"),
-    (8.0, None, None, "end"),
-]
+def make_timeline(walk_s: float):
+    return [
+        (0.0, None, None, "idle (hold)"),
+        (3.0, "set_move_longitudinal", {"move_longitudinal": "forward"}, "walk forward"),
+        (3.0 + walk_s, "set_move_longitudinal", {"move_longitudinal": "idle"}, "stop"),
+        (6.0 + walk_s, None, None, "end"),
+    ]
+
+
+TIMELINE = make_timeline(SCENES["room"]["walk_s"])
 HARD_TIMEOUT_S = 90  # never let a billed session run away
 
 
@@ -214,7 +231,11 @@ def main():
     ap.add_argument("--seed", default=str(DEFAULT_SEED))
     ap.add_argument("--lens", choices=list(LENSES), default="plain")
     ap.add_argument("--tag", default=None, help="output subfolder under out/world/")
+    ap.add_argument("--scene", choices=list(SCENES), default="room", help="which place the seed image shows")
     a = ap.parse_args()
+    global SCENE, TIMELINE
+    SCENE = SCENES[a.scene]["prompt"]
+    TIMELINE = make_timeline(SCENES[a.scene]["walk_s"])
     p = Path(a.seed)
     if not p.exists():
         sys.exit(f"seed not found: {p}")

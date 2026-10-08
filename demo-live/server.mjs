@@ -78,9 +78,11 @@ const server = createServer(async (req, res) => {
     }
 
     // static files
-    const path = (req.url === '/' ? '/index.html' : req.url).split('?')[0];
+    const bare = req.url.split('?')[0];
+    const path = bare === '/' ? '/index.html' : bare;
     // room reference images (test-1.jpeg, test-2.jpeg, ...) live at the repo root
-    const isRoomImage = /^\/test-\d+\.(jpe?g|png)$/i.test(path);
+    const isRoomImage = /^\/test-\d+\.(jpe?g|png)$/i.test(path)
+      || /^\/corridor\/corridor_\d+\.jpe?g$/i.test(path);   // corridor agent's seed images
     const file = isRoomImage ? join(ROOT, path.slice(1)) : join(HERE, path);
     // keep reads inside known dirs
     if (!file.startsWith(HERE) && !isRoomImage) {

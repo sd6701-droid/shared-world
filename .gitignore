@@ -1,6 +1,3 @@
-# keys — never commit
-.env.local
-.env*.local
 
 # deps and build output
 node_modules/

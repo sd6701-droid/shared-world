@@ -72,15 +72,36 @@
 
   function setStatus(msg, cls = '') { statusEl.textContent = msg; statusEl.className = cls; }
 
-  // 5 views of the room, all from the same eye-level ring (1.5 m high, 3.6 m from the
-  // table) so every world starts at the same height/distance. Images: demo-live/rooms50/.
-  const VIEWS = [
-    ['angle_05.jpg', 'front (0°)'],
-    ['angle_03.jpg', 'front-left (−32°)'],
-    ['angle_07.jpg', 'front-right (+32°)'],
-    ['angle_01.jpg', 'left side (−70°)'],
-    ['angle_09.jpg', 'right side (+70°)'],
-  ];
+  // One page, two world-model agents: ?scene=room (default) or ?scene=corridor.
+  const SCENES = {
+    // Room: 5 views from the same eye-level ring (1.5 m high, 3.6 m from the table).
+    room: {
+      title: 'room',
+      dir: '/rooms50/',
+      views: [
+        ['angle_05.jpg', 'front (0°)'],
+        ['angle_03.jpg', 'front-left (−32°)'],
+        ['angle_07.jpg', 'front-right (+32°)'],
+        ['angle_01.jpg', 'left side (−70°)'],
+        ['angle_09.jpg', 'right side (+70°)'],
+      ],
+      prompt: 'a closed, windowless room with plain grey walls, a dark wooden floor, a ceiling light panel, and one wooden table with a small white vase in the center, no people',
+    },
+    // Corridor: the 5 images in corridor/.
+    corridor: {
+      title: 'corridor',
+      dir: '/corridor/',
+      views: [1, 2, 3, 4, 5].map((n) => [`corridor_${n}.jpg`, `corridor view ${n}`]),
+      prompt: 'a long, narrow indoor corridor with plain dark grey walls, closed dark doors set into both walls, a row of square light panels along the ceiling, and a dark wooden floor with small tan markers, no windows, no people, the doors stay closed',
+    },
+  };
+  const sceneKey = new URLSearchParams(location.search).get('scene') === 'corridor' ? 'corridor' : 'room';
+  const SCENE = SCENES[sceneKey];
+  document.title = `World model · ${SCENE.title}`;
+  document.querySelector('header h1').textContent = `Lingbot-World-2 · ${SCENE.title}`;
+  promptEl.value = SCENE.prompt;
+  const VIEWS = SCENE.views;
+  document.getElementById('seedName').textContent = VIEWS[0][0];
   const seedSel = document.getElementById('seedSel');
   VIEWS.forEach(([f, label], i) => seedSel.add(new Option(label, f, i === 0, i === 0)));
   seedSel.addEventListener('change', () => { document.getElementById('seedName').textContent = seedSel.value; });
@@ -104,7 +125,7 @@
     setStatus('fetching seed image…');
     const seedFile = document.getElementById('seedSel').value;
     document.getElementById('seedName').textContent = seedFile;
-    const blob = await (await fetch('/rooms50/' + seedFile)).blob();
+    const blob = await (await fetch(SCENE.dir + seedFile)).blob();
     const seed = new File([blob], seedFile, { type: 'image/jpeg' });
 
     reactor = new Reactor({ modelName: 'reactor/lingbot-world-2' });
